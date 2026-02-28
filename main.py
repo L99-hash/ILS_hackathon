@@ -12,6 +12,7 @@ from src.messaging.notifier import ScheduleNotifier
 import json
 import os
 import time
+import requests
 
 
 def main():
@@ -21,6 +22,11 @@ def main():
     print("NovaBoard Electronics - Production Scheduling Agent")
     print("=" * 60)
     print()
+
+    # Load Telegram credentials (needed for interactive prompts)
+    telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+    notifier = ScheduleNotifier()
 
     # Step 1: Initialize API client
     print("Step 1: Initializing Arke API client...")
@@ -171,12 +177,106 @@ def main():
         print("3. Level 2 (OPTIONAL) - Split in Batches: Cap batch size (e.g., 10 units)")
         print()
 
-        # Get user choice
-        while True:
-            choice = input("Select planning policy (1, 2, or 3): ").strip()
-            if choice in ['1', '2', '3']:
-                break
-            print("Invalid choice. Please enter 1, 2, or 3.")
+        # Get user choice via Telegram or console
+        choice = None
+        batch_size = 10
+
+        if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
+            # Send policy selection prompt to Telegram
+            policy_prompt = """🏭 *STEP 2: Choose Planning Policy*
+
+Please select a planning policy:
+
+*1.* Level 1 (REQUIRED) - EDF
+   → One production order per sales order line
+   → Sorted by deadline (earliest first)
+
+*2.* Level 2 (OPTIONAL) - Group by Product
+   → Merge orders for same product
+   → Reduces machine changeovers
+
+*3.* Level 2 (OPTIONAL) - Split in Batches
+   → Cap batch size (e.g., max 10 units)
+   → Better for large orders
+
+Reply with: *1*, *2*, or *3*
+
+For option 3, you can also specify batch size: *3:15* (for max 15 units)"""
+
+            notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, policy_prompt, None, None)
+            print("\nWaiting for policy selection via Telegram...")
+
+            # Wait for response
+            url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
+            start_time = time.time()
+            last_update_id = None
+            timeout = 300  # 5 minutes
+
+            # Get latest update_id
+            try:
+                response = requests.get(url, params={"offset": -1}, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                if data.get("ok") and data.get("result"):
+                    last_update_id = data["result"][-1]["update_id"]
+            except Exception as e:
+                print(f"Warning: Could not get initial update ID: {e}")
+
+            while time.time() - start_time < timeout:
+                try:
+                    params = {}
+                    if last_update_id is not None:
+                        params["offset"] = last_update_id + 1
+                    params["timeout"] = 10
+
+                    response = requests.get(url, params=params, timeout=15)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    if data.get("ok") and data.get("result"):
+                        for update in data["result"]:
+                            last_update_id = update["update_id"]
+
+                            if "message" in update:
+                                msg = update["message"]
+                                if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
+                                    text = msg.get("text", "").strip()
+
+                                    # Parse response: "1", "2", "3", or "3:15"
+                                    if ':' in text:
+                                        parts = text.split(':')
+                                        if parts[0] == '3' and parts[1].isdigit():
+                                            choice = '3'
+                                            batch_size = int(parts[1])
+                                            print(f"✓ Received: Policy 3 with batch size {batch_size}")
+                                            break
+                                    elif text in ['1', '2', '3']:
+                                        choice = text
+                                        print(f"✓ Received: Policy {choice}")
+                                        break
+
+                    if choice:
+                        break
+                    time.sleep(1)
+
+                except Exception as e:
+                    print(f"Error polling Telegram: {e}")
+                    time.sleep(2)
+
+            if not choice:
+                print("⚠ Timeout: No response received. Defaulting to Policy 1 (EDF)")
+                choice = '1'
+        else:
+            # Console input fallback
+            while True:
+                choice = input("Select planning policy (1, 2, or 3): ").strip()
+                if choice in ['1', '2', '3']:
+                    break
+                print("Invalid choice. Please enter 1, 2, or 3.")
+
+            if choice == '3':
+                batch_input = input("Enter maximum batch size (default 10): ").strip()
+                batch_size = int(batch_input) if batch_input.isdigit() else 10
 
         # Extract sales order lines from the detailed orders
         sales_order_lines = []
@@ -508,9 +608,6 @@ def main():
 
             # Loop until schedule is approved
             approved = False
-            telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-            telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-            notifier = ScheduleNotifier()
 
             while not approved:
                 # Format and display schedule
@@ -726,7 +823,6 @@ Please send your adjustment command:"""
                     print("  - EXIT")
 
                     # Wait for adjustment command
-                    import requests
                     url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
                     last_update_id = None
                     timeout = 300

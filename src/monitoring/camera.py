@@ -53,10 +53,16 @@ class SimpleLineMonitor:
                 print(f"Warning: Failed to open camera {idx}")
                 continue
 
+            # Enable autofocus
+            cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)
+
             # Get camera properties
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            autofocus_enabled = cap.get(cv2.CAP_PROP_AUTOFOCUS)
+
             print(f"  Camera {idx} started: {width}x{height}")
+            print(f"    Autofocus: {'ON' if autofocus_enabled else 'OFF'}")
 
             self.cameras[idx] = cap
 

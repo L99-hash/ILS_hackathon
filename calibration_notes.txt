@@ -1,0 +1,336 @@
+Find the USB ports associated with each arm
+To find the port for each bus servo adapter, connect MotorBus to your computer via USB and power. Run the following script and disconnect the MotorBus when prompted:
+
+
+lerobot-find-port
+wsl cannot currently connect to ports directky so 
+
+You need to run them in two separate PowerShell windows:
+Window 1:
+powershellusbipd attach --wsl --busid 1-3 --auto-attach
+Window 2:
+powershellusbipd attach --wsl --busid 1-4 --auto-attach
+
+follower-/dev/ttyACM1
+leader-/dev/ttyACM0
+
+follower
+lerobot-setup-motors \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1  # <- paste here the port found at previous step
+
+leader
+
+lerobot-setup-motors \
+    --robot.type=so101_leader \
+    --robot.port=/dev/ttyACM0  # <- paste here the port found at previous step
+
+
+Calibrate
+
+follower:-
+lerobot-calibrate --robot.type=so101_follower --robot.port=/dev/ttyACM1 --robot.id=Follower
+
+
+Leader-
+lerobot-calibrate --teleop.type=so100_leader --teleop.port=/dev/ttyACM0 --teleop.id=Leader
+
+Teleop
+
+lerobot-teleoperate --teleop.type so100_leader --teleop.port '/dev/ttyACM0' --teleop.id Leader --robot.type so101_follower --robot.port '/dev/ttyACM1' --robot.id Follower
+
+=====================================
+DATA COLLECTION (Press Ctrl+C to stop recording)
+=====================================
+Datasets saved to: ~/.cache/huggingface/lerobot/local/
+
+
+=====================================
+VERIFY DATASETS
+=====================================
+ls ~/.cache/huggingface/lerobot/local/
+
+DELETE A DATASET (replace DATASET_NAME):
+rm -rf ~/.cache/huggingface/lerobot/local/DATASET_NAME/
+
+Here are all 5 record and replay commands with `--dataset.episode_time_s=30`:
+
+**PCB-IND-100:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_PCB_IND_100 \
+    --dataset.root=data/pick_PCB_IND_100 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick PCB IND 100" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_PCB_IND_100 \
+    --dataset.root=data/pick_PCB_IND_100 \
+    --dataset.episode=0
+```
+
+**MED-300:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_MED_300 \
+    --dataset.root=data/pick_MED_300 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick MED 300" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_MED_300 \
+    --dataset.root=data/pick_MED_300 \
+    --dataset.episode=0
+```
+
+**IOT-200:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_IOT_200 \
+    --dataset.root=data/pick_IOT_200 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick IOT 200" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_IOT_200 \
+    --dataset.root=data/pick_IOT_200 \
+    --dataset.episode=0
+```
+
+**AGR-400:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_AGR_400 \
+    --dataset.root=data/pick_AGR_400 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick AGR 400" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_AGR_400 \
+    --dataset.root=data/pick_AGR_400 \
+    --dataset.episode=0
+```
+
+**PCB-PWR-500:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_PCB_PWR_500 \
+    --dataset.root=data/pick_PCB_PWR_500 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick PCB PWR 500" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_PCB_PWR_500 \
+    --dataset.root=data/pick_PCB_PWR_500 \
+    --dataset.episode=0
+```
+
+
+
+
+Here are all 5 record and replay commands with opencv camera index 1:
+
+**PCB-IND-100:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 1, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_PCB_IND_100 \
+    --dataset.root=data/pick_PCB_IND_100 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick PCB IND 100" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_PCB_IND_100 \
+    --dataset.root=data/pick_PCB_IND_100 \
+    --dataset.episode=0
+```
+
+**MED-300:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 1, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_MED_300 \
+    --dataset.root=data/pick_MED_300 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick MED 300" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_MED_300 \
+    --dataset.root=data/pick_MED_300 \
+    --dataset.episode=0
+```
+
+**IOT-200:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 1, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_IOT_200 \
+    --dataset.root=data/pick_IOT_200 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick IOT 200" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_IOT_200 \
+    --dataset.root=data/pick_IOT_200 \
+    --dataset.episode=0
+```
+
+**AGR-400:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 1, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_AGR_400 \
+    --dataset.root=data/pick_AGR_400 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick AGR 400" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_AGR_400 \
+    --dataset.root=data/pick_AGR_400 \
+    --dataset.episode=0
+```
+
+**PCB-PWR-500:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 1, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_PCB_PWR_500 \
+    --dataset.root=data/pick_PCB_PWR_500 \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick PCB PWR 500" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_PCB_PWR_500 \
+    --dataset.root=data/pick_PCB_PWR_500 \
+    --dataset.episode=0
+```

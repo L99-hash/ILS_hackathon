@@ -1025,8 +1025,82 @@ Example: *0,1* to use both camera 0 and 1"""
                                 camera_indices = [0]
                                 print(f"No valid cameras, using camera 0")
 
+                        # Ask for save interval (for dataset collection)
+                        save_interval = 10  # Default
+
+                        if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
+                            interval_prompt = """⏱️ *Set Auto-Save Interval*
+
+How often should frames be automatically saved?
+
+Reply with number of seconds (e.g., *5*, *10*, *30*)
+
+Lower values = more images for dataset
+Default: *10* seconds"""
+
+                            notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, interval_prompt, None, None)
+                            print("\nWaiting for save interval via Telegram...")
+
+                            url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
+                            start_time = time.time()
+                            interval_received = False
+                            timeout = 300
+
+                            # Get latest update_id
+                            try:
+                                response = requests.get(url, params={"offset": -1}, timeout=10)
+                                response.raise_for_status()
+                                data = response.json()
+                                if data.get("ok") and data.get("result"):
+                                    last_update_id = data["result"][-1]["update_id"]
+                            except Exception as e:
+                                print(f"Warning: Could not get initial update ID: {e}")
+
+                            while time.time() - start_time < timeout:
+                                try:
+                                    params = {}
+                                    if last_update_id is not None:
+                                        params["offset"] = last_update_id + 1
+                                    params["timeout"] = 10
+
+                                    response = requests.get(url, params=params, timeout=15)
+                                    response.raise_for_status()
+                                    data = response.json()
+
+                                    if data.get("ok") and data.get("result"):
+                                        for update in data["result"]:
+                                            last_update_id = update["update_id"]
+
+                                            if "message" in update:
+                                                msg = update["message"]
+                                                if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
+                                                    text = msg.get("text", "").strip()
+
+                                                    if text.isdigit():
+                                                        save_interval = int(text)
+                                                        print(f"✓ Save interval set to: {save_interval} seconds")
+                                                        interval_received = True
+                                                        break
+
+                                    if interval_received:
+                                        break
+                                    time.sleep(1)
+
+                                except Exception as e:
+                                    print(f"Error polling Telegram: {e}")
+                                    time.sleep(2)
+
+                            if not interval_received:
+                                print(f"⚠ Timeout: Using default save interval of {save_interval} seconds")
+                        else:
+                            # Console input fallback
+                            interval_input = input(f"Save interval in seconds (default {save_interval}): ").strip()
+                            if interval_input.isdigit():
+                                save_interval = int(interval_input)
+
                         print(f"\nStarting camera monitoring (Camera(s): {camera_indices})...")
                         print("A window will open showing live production line feed")
+                        print(f"Auto-save interval: {save_interval} seconds")
                         if len(camera_indices) > 1:
                             print(f"Multiple cameras will be shown side-by-side")
                         print("Press 'q' in the camera window to stop monitoring a phase")
@@ -1057,7 +1131,8 @@ The camera window is now open on your computer."""
                             telegram_bot_token=telegram_bot_token,
                             telegram_chat_id=telegram_chat_id,
                             scheduled_orders=scheduled_orders,
-                            notifier=notifier
+                            notifier=notifier,
+                            save_interval=save_interval
                         )
 
                         try:
@@ -1088,8 +1163,8 @@ The camera window is now open on your computer."""
                                     monitor.monitor_phase(
                                         phase_name=phase_name,
                                         order_id=order_id,
-                                        duration_seconds=30,
-                                        save_interval=10
+                                        duration_seconds=30
+                                        # save_interval uses instance default (configured by user)
                                     )
 
                                     # Brief pause between phases

@@ -14,7 +14,7 @@ from datetime import datetime
 class SimpleLineMonitor:
     """Simple camera-based production line monitor with remote control"""
 
-    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None):
+    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10):
         """
         Initialize monitor with single or multiple cameras
 
@@ -24,6 +24,7 @@ class SimpleLineMonitor:
             telegram_chat_id: Telegram chat ID
             scheduled_orders: Production schedule for GANTT chart
             notifier: ScheduleNotifier instance for sending GANTT
+            save_interval: Seconds between automatic frame saves (default: 10)
         """
         # Support both single camera and multiple cameras
         if isinstance(camera_indices, int):
@@ -34,6 +35,9 @@ class SimpleLineMonitor:
         # Dictionary of cameras {index: VideoCapture object}
         self.cameras = {}
         self.monitoring = False
+
+        # Save interval for automatic captures
+        self.save_interval = save_interval
 
         # Telegram integration
         self.telegram_bot_token = telegram_bot_token
@@ -405,7 +409,7 @@ class SimpleLineMonitor:
                 combined = cv2.hconcat(resized_frames)
                 cv2.imshow('Production Line Monitor - All Cameras', combined)
 
-    def monitor_phase(self, phase_name, order_id, duration_seconds=30, save_interval=10):
+    def monitor_phase(self, phase_name, order_id, duration_seconds=30, save_interval=None):
         """
         Monitor a production phase
 
@@ -413,8 +417,11 @@ class SimpleLineMonitor:
             phase_name: Name of the phase being monitored
             order_id: Production order ID
             duration_seconds: How long to monitor (or until 'q' pressed)
-            save_interval: Save a frame every N seconds
+            save_interval: Save a frame every N seconds (None = use self.save_interval)
         """
+        # Use instance save_interval if not specified
+        if save_interval is None:
+            save_interval = self.save_interval
         print(f"\n{'='*60}")
         print(f"MONITORING: {phase_name}")
         print(f"Order: {order_id}")

@@ -330,6 +330,210 @@ Respond with ONLY one word: YES, NO, or UNKNOWN (if unclear)
         else:
             return "UNKNOWN"
 
+    def interpret_approval(self, user_text: str) -> Literal["APPROVE", "REJECT", "UNKNOWN"]:
+        """
+        Interpret user's approval/rejection response for schedule
+
+        Args:
+            user_text: The message from the user (e.g., "approve", "looks good", "reject", "change it")
+
+        Returns:
+            "APPROVE", "REJECT", or "UNKNOWN"
+        """
+        if not user_text or not user_text.strip():
+            return "UNKNOWN"
+
+        # Normalize input
+        normalized = user_text.strip().upper()
+
+        # Check cache
+        cache_key = f"approve_{normalized}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        # Exact matching first (fast path)
+        # APPROVE variations
+        if normalized in ["APPROVE", "APPROVED", "YES", "Y", "ACCEPT", "ACCEPTED", "CONFIRM", "CONFIRMED",
+                         "OK", "OKAY", "GOOD", "LOOKS GOOD", "PERFECT", "GO", "GO AHEAD", "PROCEED",
+                         "START", "START PRODUCTION", "CONTINUE", "AGREE", "👍", "✓", "✅"]:
+            self.cache[cache_key] = "APPROVE"
+            return "APPROVE"
+
+        # REJECT variations
+        elif normalized in ["REJECT", "REJECTED", "NO", "N", "DECLINE", "DECLINED", "CANCEL", "CANCELLED",
+                           "STOP", "CHANGE", "MODIFY", "REVISE", "REDO", "NOT GOOD", "DISAGREE",
+                           "👎", "❌", "✗"]:
+            self.cache[cache_key] = "REJECT"
+            return "REJECT"
+
+        # Use Gemini AI for interpretation if enabled
+        if self.enabled:
+            try:
+                result = self._gemini_interpret_approval(user_text)
+                self.cache[cache_key] = result
+                return result
+            except Exception as e:
+                print(f"⚠️ Gemini API error for approval interpretation: {e}")
+                return "UNKNOWN"
+
+        return "UNKNOWN"
+
+    def _gemini_interpret_approval(self, user_text: str) -> Literal["APPROVE", "REJECT", "UNKNOWN"]:
+        """
+        Use Gemini AI to interpret the approval/rejection response
+
+        Args:
+            user_text: Raw user message
+
+        Returns:
+            "APPROVE", "REJECT", or "UNKNOWN"
+        """
+        prompt = f"""You are interpreting an APPROVE/REJECT response for a production schedule.
+
+The user is being asked to review and approve or reject a proposed production schedule.
+
+APPROVE responses include: "approve", "looks good", "yes", "ok", "accept", "confirm", "go ahead", "start production", "I agree with this schedule"
+REJECT responses include: "reject", "no", "change it", "modify", "not good", "I disagree", "needs changes", "redo this"
+
+User message: "{user_text}"
+
+Respond with ONLY one word: APPROVE, REJECT, or UNKNOWN (if unclear)
+"""
+
+        response = self.model.generate_content(prompt)
+        result = response.text.strip().upper()
+
+        # Validate response
+        if result in ["APPROVE", "REJECT", "UNKNOWN"]:
+            return result
+
+        # Try to extract from response
+        if "APPROVE" in result or "ACCEPT" in result or "CONFIRM" in result:
+            return "APPROVE"
+        elif "REJECT" in result or "DECLINE" in result or "CANCEL" in result:
+            return "REJECT"
+        else:
+            return "UNKNOWN"
+
+    def interpret_adjustment(self, user_text: str) -> Tuple[str, list]:
+        """
+        Interpret user's schedule adjustment command
+
+        Args:
+            user_text: The message from the user (e.g., "SWAP 1 3", "swap orders 1 and 3", "move 5 to 2")
+
+        Returns:
+            Tuple of (command_type, parameters)
+            - command_type: "SWAP", "MOVE", "DATES", "EXIT", or "UNKNOWN"
+            - parameters: List of extracted parameters (order numbers, positions, days)
+        """
+        if not user_text or not user_text.strip():
+            return ("UNKNOWN", [])
+
+        text = user_text.strip()
+        normalized = text.upper()
+
+        # Check cache
+        cache_key = f"adjust_{normalized}"
+        if cache_key in self.cache:
+            cached_result = self.cache[cache_key]
+            return (cached_result[0], cached_result[1])
+
+        # Exact matching first (fast path) - parse standard format
+        # SWAP format: "SWAP 1 3" or "SWAP <num1> <num2>"
+        swap_match = re.match(r'SWAP\s+(\d+)\s+(\d+)', normalized)
+        if swap_match:
+            params = [int(swap_match.group(1)), int(swap_match.group(2))]
+            self.cache[cache_key] = ("SWAP", params)
+            return ("SWAP", params)
+
+        # MOVE format: "MOVE 5 TO 2" or "MOVE <num> TO <pos>"
+        move_match = re.match(r'MOVE\s+(\d+)\s+TO\s+(\d+)', normalized)
+        if move_match:
+            params = [int(move_match.group(1)), int(move_match.group(2))]
+            self.cache[cache_key] = ("MOVE", params)
+            return ("MOVE", params)
+
+        # DATES format: "DATES 3 +2" or "DATES <num> +<days>"
+        dates_match = re.match(r'DATES\s+(\d+)\s+\+(\d+)', normalized)
+        if dates_match:
+            params = [int(dates_match.group(1)), int(dates_match.group(2))]
+            self.cache[cache_key] = ("DATES", params)
+            return ("DATES", params)
+
+        # EXIT
+        if normalized in ["EXIT", "CANCEL", "QUIT", "STOP", "ABORT"]:
+            self.cache[cache_key] = ("EXIT", [])
+            return ("EXIT", [])
+
+        # Use Gemini AI for natural language interpretation if enabled
+        if self.enabled:
+            try:
+                result = self._gemini_interpret_adjustment(text)
+                self.cache[cache_key] = result
+                return result
+            except Exception as e:
+                print(f"⚠️ Gemini API error for adjustment interpretation: {e}")
+                return ("UNKNOWN", [])
+
+        return ("UNKNOWN", [])
+
+    def _gemini_interpret_adjustment(self, user_text: str) -> Tuple[str, list]:
+        """
+        Use Gemini AI to interpret the adjustment command
+
+        Args:
+            user_text: Raw user message
+
+        Returns:
+            Tuple of (command_type, parameters)
+        """
+        prompt = f"""You are interpreting a production schedule adjustment command.
+
+The user can use these commands:
+
+1. SWAP - Swap positions of two orders
+   Examples: "swap orders 1 and 3", "switch 2 with 5", "interchange positions 1 and 4"
+   Format: Extract two order numbers
+
+2. MOVE - Move an order to a specific position
+   Examples: "move order 5 to position 2", "put 3 in slot 1", "move 4 to 2"
+   Format: Extract order number and target position
+
+3. DATES - Delay an order by adding days
+   Examples: "delay order 3 by 2 days", "push order 1 back 5 days", "add 3 days to order 2"
+   Format: Extract order number and number of days
+
+4. EXIT - Cancel adjustments and restart
+   Examples: "exit", "cancel", "quit", "stop"
+
+User message: "{user_text}"
+
+Respond ONLY in this exact format:
+COMMAND_TYPE|param1|param2
+
+Examples of valid responses:
+SWAP|1|3
+MOVE|5|2
+DATES|3|2
+EXIT
+UNKNOWN
+"""
+
+        response = self.model.generate_content(prompt)
+        result = response.text.strip().upper()
+
+        # Parse response
+        if "|" in result:
+            parts = result.split("|")
+            command = parts[0]
+            params = [int(p) for p in parts[1:] if p.isdigit()]
+            return (command, params)
+        elif result in ["EXIT", "CANCEL", "QUIT"]:
+            return ("EXIT", [])
+        else:
+            return ("UNKNOWN", [])
+
     def clear_cache(self):
         """Clear the command interpretation cache"""
         self.cache.clear()

@@ -800,7 +800,7 @@ I didn't understand your response. Please reply with:
                     print("\nSending schedule to Telegram...")
                     if notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message, scheduled_orders, fig):
                         # Wait for approval via Telegram
-                        approval, rejection_reason = notifier.wait_for_telegram_approval(telegram_bot_token, telegram_chat_id)
+                        approval, rejection_reason = notifier.wait_for_telegram_approval(telegram_bot_token, telegram_chat_id, command_mapper)
                         if approval == "TIMEOUT":
                             print("\nFalling back to terminal input...")
                             approval = None
@@ -1247,9 +1247,15 @@ Options:
 3. DATES <order_num> +<days> - Delay order by days
 4. EXIT - Cancel and restart
 
-Example: "SWAP 1 3" to swap orders 1 and 3
-Example: "MOVE 5 TO 2" to move order 5 to position 2
-Example: "DATES 3 +2" to delay order 3 by 2 days
+Standard format examples:
+• "SWAP 1 3" - swap orders 1 and 3
+• "MOVE 5 TO 2" - move order 5 to position 2
+• "DATES 3 +2" - delay order 3 by 2 days
+
+💬 Natural language also works:
+• "swap orders 1 and 3"
+• "move order 5 to position 2"
+• "delay order 3 by 2 days"
 
 Please send your adjustment command:"""
 
@@ -1278,6 +1284,7 @@ Please send your adjustment command:"""
                         pass
 
                     adjustment_cmd = None
+                    adjustment_params = []
                     while time.time() - start_time < timeout and adjustment_cmd is None:
                         try:
                             params = {"offset": last_update_id + 1 if last_update_id else None, "timeout": 10}
@@ -1290,41 +1297,64 @@ Please send your adjustment command:"""
                                     if "message" in update:
                                         msg = update["message"]
                                         if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
-                                            adjustment_cmd = msg.get("text", "").strip().upper()
-                                            break
+                                            user_text = msg.get("text", "").strip()
+
+                                            # Use CommandMapper for natural language interpretation
+                                            cmd_type, params = command_mapper.interpret_adjustment(user_text)
+
+                                            if cmd_type != "UNKNOWN":
+                                                adjustment_cmd = cmd_type
+                                                adjustment_params = params
+                                                print(f"\n✓ Received: '{user_text}' → {cmd_type} {params}")
+                                                break
+                                            else:
+                                                # Send retry prompt
+                                                print(f"⚠ Could not interpret: '{user_text}'")
+                                                retry_msg = """❓ *Invalid adjustment command*
+
+Please use one of these formats:
+• SWAP 1 3 - swap orders 1 and 3
+• MOVE 5 TO 2 - move order 5 to position 2
+• DATES 3 +2 - delay order 3 by 2 days
+• EXIT - cancel adjustments
+
+💬 Natural language also works:
+• "swap orders 1 and 3"
+• "move order 5 to position 2"
+• "delay order 3 by 2 days"
+"""
+                                                notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, retry_msg, None, None)
 
                             time.sleep(1)
                         except:
                             time.sleep(2)
 
                     if adjustment_cmd and adjustment_cmd != "EXIT":
-                        print(f"\nReceived adjustment: {adjustment_cmd}")
+                        print(f"\nApplying adjustment: {adjustment_cmd} {adjustment_params}")
 
                         # Parse and apply adjustment
                         try:
-                            if adjustment_cmd.startswith("SWAP"):
-                                parts = adjustment_cmd.split()
-                                if len(parts) >= 3:
-                                    idx1 = int(parts[1]) - 1
-                                    idx2 = int(parts[2]) - 1
-                                    if 0 <= idx1 < len(scheduled_orders) and 0 <= idx2 < len(scheduled_orders):
-                                        scheduled_orders[idx1], scheduled_orders[idx2] = scheduled_orders[idx2], scheduled_orders[idx1]
-                                        production_orders[idx1], production_orders[idx2] = production_orders[idx2], production_orders[idx1]
+                            if adjustment_cmd == "SWAP" and len(adjustment_params) == 2:
+                                idx1 = adjustment_params[0] - 1
+                                idx2 = adjustment_params[1] - 1
+                                if 0 <= idx1 < len(scheduled_orders) and 0 <= idx2 < len(scheduled_orders):
+                                    scheduled_orders[idx1], scheduled_orders[idx2] = scheduled_orders[idx2], scheduled_orders[idx1]
+                                    production_orders[idx1], production_orders[idx2] = production_orders[idx2], production_orders[idx1]
 
-                                        result_msg = f"✓ Swapped orders {idx1+1} and {idx2+1}\n\nPlease review the updated schedule..."
-                                        fig = notifier.build_gantt_chart(scheduled_orders, policy_name)
-                                        notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg, scheduled_orders, fig)
+                                    result_msg = f"✓ Swapped orders {idx1+1} and {idx2+1}\n\nPlease review the updated schedule..."
+                                    fig = notifier.build_gantt_chart(scheduled_orders, policy_name)
+                                    notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg, scheduled_orders, fig)
 
-                                        # Re-display and ask for approval again
-                                        print("\nSchedule adjusted. Re-presenting for approval...")
-                                        # (This would loop back to display schedule again - simplified for now)
+                                    # Re-display and ask for approval again
+                                    print("\nSchedule adjusted. Re-presenting for approval...")
+                                    # (This would loop back to display schedule again - simplified for now)
 
-                            elif adjustment_cmd.startswith("MOVE"):
+                            elif adjustment_cmd == "MOVE" and len(adjustment_params) == 2:
                                 # Similar logic for MOVE command
                                 result_msg = "MOVE command parsing not fully implemented yet"
                                 notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg, None, None)
 
-                            elif adjustment_cmd.startswith("DATES"):
+                            elif adjustment_cmd == "DATES" and len(adjustment_params) == 2:
                                 # Similar logic for DATES command
                                 result_msg = "DATES command parsing not fully implemented yet"
                                 notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg, None, None)

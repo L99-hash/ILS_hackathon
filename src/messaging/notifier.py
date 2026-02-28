@@ -294,8 +294,10 @@ class ScheduleNotifier:
         # Footer
         message.append("=" * 60)
         message.append("Please review and respond:")
-        message.append("  - Type 'APPROVE' to confirm and start production")
-        message.append("  - Type 'REJECT' to request changes")
+        message.append("")
+        message.append("💬 Natural Language Supported!")
+        message.append("  APPROVE: 'approve', 'looks good', 'yes', 'ok', 'go ahead'")
+        message.append("  REJECT: 'reject', 'no', 'change it' (optionally include reason)")
         message.append("=" * 60)
 
         return "\n".join(message), scheduled_orders
@@ -429,13 +431,14 @@ class ScheduleNotifier:
             return False
 
     @staticmethod
-    def wait_for_telegram_approval(bot_token: str, chat_id: str, timeout: int = 300) -> tuple:
+    def wait_for_telegram_approval(bot_token: str, chat_id: str, command_mapper=None, timeout: int = 300) -> tuple:
         """
         Wait for user approval response via Telegram
 
         Args:
             bot_token: Telegram bot token from @BotFather
             chat_id: Telegram chat ID to monitor
+            command_mapper: CommandMapper instance for natural language interpretation
             timeout: Maximum seconds to wait for response (default 300 = 5 minutes)
 
         Returns:
@@ -455,9 +458,9 @@ class ScheduleNotifier:
             return ('TIMEOUT', None)
 
         print(f"\nWaiting for approval via Telegram (timeout: {timeout}s)...")
-        print("Please respond in Telegram with:")
-        print("  - 'APPROVE' to confirm")
-        print("  - 'REJECT: <reason>' to reject with explanation")
+        print("💬 Natural language supported:")
+        print("  - APPROVE: 'approve', 'looks good', 'yes', 'ok', 'go ahead'")
+        print("  - REJECT: 'reject', 'no', 'change it', 'modify' (optional: include reason)")
 
         url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
         start_time = time.time()
@@ -494,19 +497,62 @@ class ScheduleNotifier:
                             msg = update["message"]
                             if str(msg.get("chat", {}).get("id")) == str(chat_id):
                                 text = msg.get("text", "").strip()
-                                text_upper = text.upper()
 
-                                if text_upper == "APPROVE":
-                                    print("\n✓ Schedule APPROVED via Telegram")
+                                # Use CommandMapper for natural language interpretation
+                                if command_mapper:
+                                    interpreted = command_mapper.interpret_approval(text)
+                                else:
+                                    # Fallback to exact matching
+                                    text_upper = text.upper()
+                                    if text_upper == "APPROVE":
+                                        interpreted = "APPROVE"
+                                    elif text_upper.startswith("REJECT"):
+                                        interpreted = "REJECT"
+                                    else:
+                                        interpreted = "UNKNOWN"
+
+                                if interpreted == "APPROVE":
+                                    print(f"\n✓ Received: '{text}' → APPROVE")
+                                    print("  Schedule APPROVED via Telegram")
                                     return ("APPROVE", None)
-                                elif text_upper.startswith("REJECT"):
-                                    # Extract reason after "REJECT:" or "REJECT "
-                                    reason = text[6:].strip() if len(text) > 6 else "No reason provided"
-                                    if reason.startswith(':'):
-                                        reason = reason[1:].strip()
-                                    print(f"\n✗ Schedule REJECTED via Telegram")
+                                elif interpreted == "REJECT":
+                                    # Try to extract reason from text
+                                    reason = "No reason provided"
+                                    # Check if there's text after common reject keywords
+                                    for keyword in ["REJECT:", "REJECT ", "NO:", "NO ", "CHANGE:", "CHANGE "]:
+                                        if keyword in text.upper():
+                                            idx = text.upper().index(keyword) + len(keyword)
+                                            if idx < len(text):
+                                                reason = text[idx:].strip()
+                                            break
+
+                                    print(f"\n✗ Received: '{text}' → REJECT")
+                                    print(f"  Schedule REJECTED via Telegram")
                                     print(f"  Reason: {reason}")
                                     return ("REJECT", reason)
+                                else:
+                                    # Not recognized - send retry message
+                                    print(f"⚠ Could not interpret: '{text}'")
+                                    retry_prompt = """❓ *Please review the schedule*
+
+I didn't understand your response. Please reply with:
+• *APPROVE* - Accept the schedule and start production
+• *REJECT* - Decline the schedule (optionally include reason)
+
+Natural language examples:
+• "looks good", "yes", "ok", "go ahead" → APPROVE
+• "no", "change it", "not good" → REJECT"""
+
+                                    # Send retry prompt via Telegram
+                                    try:
+                                        retry_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                                        requests.post(retry_url, json={
+                                            "chat_id": chat_id,
+                                            "text": retry_prompt,
+                                            "parse_mode": "Markdown"
+                                        }, timeout=10)
+                                    except Exception as e:
+                                        print(f"Warning: Could not send retry prompt: {e}")
 
                 # Small delay to avoid hammering the API
                 time.sleep(1)

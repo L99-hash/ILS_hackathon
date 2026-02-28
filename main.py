@@ -56,6 +56,7 @@ def main():
         print(f"Successfully retrieved details for {len(orders_with_details)} orders")
         print()
 
+
         # Display complete order summary
         print("=" * 80)
         print("SALES ORDER SUMMARY (Sorted by Urgency - Earliest Deadline First)")
@@ -189,12 +190,6 @@ def main():
                         traceback.print_exc()
 
         print(f"\nTotal sales order lines to plan: {len(sales_order_lines)}")
-
-        # Debug: Show first few lines
-        if sales_order_lines:
-            print("\nDEBUG - First 3 sales order lines:")
-            for i, line in enumerate(sales_order_lines[:3], 1):
-                print(f"  {i}. Product ID: '{line.product_id}', Name: '{line.product_name}', Qty: {line.quantity}")
         print()
 
         # Apply selected planning policy
@@ -231,8 +226,88 @@ def main():
         print(f"Generated {len(production_orders)} production orders using the selected policy.")
         print()
 
+        # STEP 3: Create Production Orders in Arke
+        print("=" * 80)
+        print("STEP 3: CREATE PRODUCTION ORDERS IN ARKE")
+        print("=" * 80)
+        print()
+
+        # First, fetch all products to map names to IDs
+        print("Fetching product catalog...")
+        try:
+            products_catalog = client.get_products()
+            print(f"Found {len(products_catalog)} products in catalog")
+
+            # Map by internal_id (which matches the product names in sales orders)
+            product_map_by_internal_id = {p.get('internal_id', ''): p.get('id', '') for p in products_catalog}
+            product_map = {p.get('name', ''): p.get('id', '') for p in products_catalog}
+            product_map_by_extra = {p.get('extra_id', ''): p.get('id', '') for p in products_catalog}
+            print()
+        except Exception as e:
+            print(f"Error fetching products: {e}")
+            print("Will attempt to create production orders with available product info")
+            product_map = {}
+            product_map_by_extra = {}
+            print()
+
+        # Confirm with user before creating
+        confirm = input(f"Create {len(production_orders)} production orders in Arke? (yes/no): ").strip().lower()
+        if confirm not in ['yes', 'y']:
+            print("Production order creation cancelled.")
+            return
+
+        print()
+        print("Creating production orders...")
+        from datetime import datetime, timezone
+
+        created_orders = []
+        failed_orders = []
+
+        for i, prod_order in enumerate(production_orders, 1):
+            try:
+                # Look up actual product ID from catalog
+                # Try internal_id first (matches product name from sales order), then name, then extra_id
+                product_id = (product_map_by_internal_id.get(prod_order.product_name) or
+                            product_map_by_internal_id.get(prod_order.product_id) or
+                            product_map.get(prod_order.product_name) or
+                            product_map_by_extra.get(prod_order.product_id) or
+                            prod_order.product_id)
+
+                if not product_id:
+                    print(f"  {i}/{len(production_orders)}: SKIPPED - No product ID for {prod_order.product_name}")
+                    failed_orders.append(prod_order)
+                    continue
+
+                # Prepare API payload
+                payload = {
+                    "product_id": product_id,
+                    "quantity": prod_order.quantity,
+                    "starts_at": datetime.now(timezone.utc).isoformat(),
+                    "ends_at": prod_order.ends_at.isoformat()
+                }
+
+                # Create production order
+                response = client.create_production_order(payload)
+                created_orders.append((prod_order, response))
+
+                order_id = response.get('id', 'Unknown')
+                print(f"  {i}/{len(production_orders)}: Created - {prod_order.product_name} x{prod_order.quantity} (ID: {order_id})")
+
+            except Exception as e:
+                print(f"  {i}/{len(production_orders)}: FAILED - {prod_order.product_name}: {str(e)[:50]}")
+                failed_orders.append(prod_order)
+
+        print()
+        print("=" * 80)
+        print("STEP 3 COMPLETE")
+        print("=" * 80)
+        print(f"Successfully created: {len(created_orders)}/{len(production_orders)} production orders")
+        if failed_orders:
+            print(f"Failed: {len(failed_orders)} orders")
+        print()
+
     except Exception as e:
-        print(f"Error in planning process: {e}")
+        print(f"Error in process: {e}")
         import traceback
         traceback.print_exc()
         return
@@ -240,8 +315,8 @@ def main():
     print()
     print("=" * 60)
     print("Next steps:")
-    print("3. Create production orders in Arke")
     print("4. Schedule phases")
+    print("5. Physical integration")
     print("=" * 60)
 
 

@@ -85,6 +85,50 @@ class ArkeAPIClient:
             print(f"Error fetching sales orders: {e}")
             raise
 
+    def get_products(self) -> List[Dict[str, Any]]:
+        """
+        Fetch all products from the Arke API
+
+        Returns:
+            List of product dictionaries
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/product/product"
+
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error fetching products: {e}")
+            raise
+
+    def find_product_by_extra_id(self, extra_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Find a product by its extra_id
+
+        Args:
+            extra_id: The product extra_id to search for
+
+        Returns:
+            Product dictionary or None if not found
+        """
+        # Try searching with filter parameter
+        try:
+            url = f"{self.base_url}/product"
+            params = {"extra_id": extra_id}
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+            products = response.json()
+            if products and len(products) > 0:
+                return products[0]
+        except:
+            pass
+
+        return None
+
     def get_sales_order_details(self, order_id: str) -> Dict[str, Any]:
         """
         Fetch detailed information for a specific sales order

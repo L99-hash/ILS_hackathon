@@ -6,7 +6,7 @@ This guide will help you set up the NovaBoard Electronics AI Production Scheduli
 
 Before you begin, ensure you have the following installed:
 - Conda (Anaconda or Miniconda)
-- Python 3.11 (will be installed via conda)
+- Python 3.10 (will be installed via conda)
 - Git
 - API access credentials for the Arke system
 - Access to the factory line integration systems (camera, robot controller)
@@ -32,7 +32,7 @@ conda activate novaboard-scheduling
 Alternatively, if you prefer using pip:
 
 ```bash
-conda create -n novaboard-scheduling python=3.11
+conda create -n novaboard-scheduling python=3.10
 conda activate novaboard-scheduling
 pip install -r requirements.txt
 ```

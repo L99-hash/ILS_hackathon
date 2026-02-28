@@ -153,7 +153,7 @@ ILS_hackathon/
 
 ## Technology Stack
 
-- **Python 3.11** - Core programming language
+- **Python 3.10** - Core programming language
 - **Conda** - Environment management
 - **requests** - HTTP client for API communication
 - **pydantic** - Data validation and modeling

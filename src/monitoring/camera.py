@@ -191,14 +191,15 @@ class SimpleLineMonitor:
         if not frames_dict:
             return []
 
-        # Create monitoring directory
-        os.makedirs("monitoring_frames", exist_ok=True)
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         saved_files = []
 
         for cam_idx, frame in frames_dict.items():
-            filename = f"monitoring_frames/{order_id}_{phase_name}_cam{cam_idx}_{timestamp}_{reason}.jpg"
+            # Create separate folder for each camera
+            cam_folder = f"monitoring_frames/cam{cam_idx}"
+            os.makedirs(cam_folder, exist_ok=True)
+
+            filename = f"{cam_folder}/{order_id}_{phase_name}_{timestamp}_{reason}.jpg"
             cv2.imwrite(filename, frame)
             saved_files.append(filename)
 

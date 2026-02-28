@@ -63,12 +63,38 @@ CAMERA_ENDPOINT=<camera-api-url>
 ROBOT_CONTROLLER_ENDPOINT=<robot-api-url>
 
 # Messaging Configuration (for Human-in-Loop)
-MESSAGING_WEBHOOK_URL=<messaging-webhook-url>
-PLANNER_NOTIFICATION_CHANNEL=<channel-id>
+# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN=<your-bot-token-here>
+TELEGRAM_CHAT_ID=<your-chat-id-here>
 
 # Logging
 LOG_LEVEL=INFO
 ```
+
+### Telegram Bot Setup
+
+To receive production schedule notifications on Telegram:
+
+1. **Create a Telegram Bot:**
+   - Open Telegram and search for `@BotFather`
+   - Send `/newbot` command
+   - Follow prompts to name your bot
+   - Copy the bot token (format: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+   - Add this token to `.env` as `TELEGRAM_BOT_TOKEN`
+
+2. **Get Your Chat ID:**
+   - Start a conversation with your new bot
+   - Send any message to the bot
+   - Visit: `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates`
+   - Look for the `"chat":{"id":...}` field in the JSON response
+   - Copy the chat ID (e.g., `123456789`)
+   - Add this to `.env` as `TELEGRAM_CHAT_ID`
+
+3. **Test the Integration:**
+   ```bash
+   # Run the main.py script and proceed to Step 5
+   # You should receive a schedule notification in your Telegram chat
+   ```
 
 ## Configuration
 

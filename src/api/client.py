@@ -175,6 +175,30 @@ class ArkeAPIClient:
             print(f"Error creating production order: {e}")
             raise
 
+    def confirm_production_order(self, production_id: str) -> Dict[str, Any]:
+        """
+        Confirm a production order and move it to in_progress status
+        This unlocks the first phase to ready-to-start
+
+        Args:
+            production_id: ID of the production order
+
+        Returns:
+            Confirmation response
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/product/production/{production_id}/_confirm"
+
+        try:
+            response = self.session.post(url)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error confirming production order {production_id}: {e}")
+            raise
+
     def schedule_production_phases(self, production_id: str) -> Dict[str, Any]:
         """
         Generate phase sequence for a production order

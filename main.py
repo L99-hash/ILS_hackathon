@@ -8,7 +8,9 @@ Step 2: Choose Planning Policy
 from src.api.client import ArkeAPIClient
 from src.models.order import SalesOrderLine
 from src.scheduler.planner import ProductionPlanner
+from src.messaging.notifier import ScheduleNotifier
 import json
+import os
 
 
 def main():
@@ -306,6 +308,60 @@ def main():
             print(f"Failed: {len(failed_orders)} orders")
         print()
 
+        # STEP 5: Human in the Loop - Present Schedule for Approval
+        if len(created_orders) > 0:
+            print("=" * 80)
+            print("STEP 5: HUMAN IN THE LOOP - SCHEDULE APPROVAL")
+            print("=" * 80)
+            print()
+
+            # Format and display schedule
+            notifier = ScheduleNotifier()
+            notifier.print_schedule(production_orders, created_orders)
+
+            # Optional: Send to Telegram
+            telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+            telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+
+            if telegram_bot_token and telegram_chat_id:
+                message = notifier.format_schedule_message(production_orders, created_orders)
+                print("\nSending schedule to Telegram...")
+                notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message)
+
+            print()
+
+            # Get approval from planner
+            approval = input("Planner approval (APPROVE/REJECT): ").strip().upper()
+
+            if approval == "APPROVE":
+                print()
+                print("Confirming production orders...")
+
+                confirmed_count = 0
+                for prod_order, response in created_orders:
+                    order_id = response.get('id')
+                    try:
+                        client.confirm_production_order(order_id)
+                        print(f"  Confirmed: {prod_order.product_name} (ID: {order_id})")
+                        confirmed_count += 1
+                    except Exception as e:
+                        print(f"  Failed to confirm {order_id}: {e}")
+
+                print()
+                print("=" * 80)
+                print("STEP 5 COMPLETE")
+                print("=" * 80)
+                print(f"Confirmed {confirmed_count}/{len(created_orders)} production orders")
+                print("All confirmed orders moved to IN_PROGRESS status")
+                print("First phase is now READY TO START for each order")
+                print()
+
+            else:
+                print()
+                print("Schedule rejected by planner.")
+                print("Adjustments requested. Please modify planning parameters and rerun.")
+                return
+
     except Exception as e:
         print(f"Error in process: {e}")
         import traceback
@@ -315,8 +371,8 @@ def main():
     print()
     print("=" * 60)
     print("Next steps:")
-    print("4. Schedule phases")
-    print("5. Physical integration")
+    print("6. Physical integration")
+    print("7. Execute production phases")
     print("=" * 60)
 
 

@@ -18,3 +18,4 @@ dependencies:
     - "plotly[express]"
     - kaleido
     - opencv-python>=4.8.0
+    - google-generativeai==0.3.2

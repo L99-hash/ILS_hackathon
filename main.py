@@ -9,6 +9,7 @@ from src.api.client import ArkeAPIClient
 from src.models.order import SalesOrderLine
 from src.scheduler.planner import ProductionPlanner
 from src.messaging.notifier import ScheduleNotifier
+from src.messaging.command_mapper import CommandMapper
 import json
 import os
 import time
@@ -27,6 +28,10 @@ def main():
     telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
     notifier = ScheduleNotifier()
+
+    # Initialize Gemini AI command mapper for natural language interpretation
+    gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+    command_mapper = CommandMapper(api_key=gemini_api_key)
 
     # Step 1: Initialize API client
     print("Step 1: Initializing Arke API client...")
@@ -1122,6 +1127,11 @@ Monitoring camera(s): {', '.join(map(str, camera_indices))}
 • *CAPTURE* - Take photos from all cameras
 • *GANTT* - View the production schedule
 
+💬 *Natural Language Supported!*
+You can also say things like:
+• "take a photo", "snap picture", "grab image"
+• "show schedule", "production plan", "timeline"
+
 The camera window is now open on your computer."""
 
                             notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, camera_start_msg, None, None)
@@ -1132,7 +1142,8 @@ The camera window is now open on your computer."""
                             telegram_chat_id=telegram_chat_id,
                             scheduled_orders=scheduled_orders,
                             notifier=notifier,
-                            save_interval=save_interval
+                            save_interval=save_interval,
+                            command_mapper=command_mapper
                         )
 
                         try:

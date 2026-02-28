@@ -14,7 +14,7 @@ from datetime import datetime
 class SimpleLineMonitor:
     """Simple camera-based production line monitor with remote control"""
 
-    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10):
+    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10, command_mapper=None):
         """
         Initialize monitor with single or multiple cameras
 
@@ -25,6 +25,7 @@ class SimpleLineMonitor:
             scheduled_orders: Production schedule for GANTT chart
             notifier: ScheduleNotifier instance for sending GANTT
             save_interval: Seconds between automatic frame saves (default: 10)
+            command_mapper: CommandMapper instance for natural language interpretation
         """
         # Support both single camera and multiple cameras
         if isinstance(camera_indices, int):
@@ -48,6 +49,9 @@ class SimpleLineMonitor:
         # GANTT chart support
         self.scheduled_orders = scheduled_orders
         self.notifier = notifier
+
+        # Command interpretation
+        self.command_mapper = command_mapper
 
         # Trigger system for external capture requests
         self.capture_triggers = []
@@ -142,13 +146,27 @@ class SimpleLineMonitor:
                     if "message" in update:
                         msg = update["message"]
                         if str(msg.get("chat", {}).get("id")) == str(self.telegram_chat_id):
-                            text = msg.get("text", "").strip().upper()
+                            text = msg.get("text", "").strip()
 
-                            if text == "CAPTURE" or text == "PHOTO" or text == "SNAP":
-                                print("\n📱 Telegram: Capture request received")
+                            # Use CommandMapper for natural language interpretation
+                            if self.command_mapper:
+                                command = self.command_mapper.interpret_command(text)
+                            else:
+                                # Fallback to exact matching if no mapper
+                                text_upper = text.upper()
+                                if text_upper in ["CAPTURE", "PHOTO", "SNAP"]:
+                                    command = "CAPTURE"
+                                elif text_upper == "GANTT":
+                                    command = "GANTT"
+                                else:
+                                    command = "UNKNOWN"
+
+                            # Handle interpreted command
+                            if command == "CAPTURE":
+                                print(f"\n📱 Telegram: Capture request received (interpreted: '{text}')")
                                 self.trigger_capture(reason="telegram")
-                            elif text == "GANTT":
-                                print("\n📊 Telegram: GANTT chart request received")
+                            elif command == "GANTT":
+                                print(f"\n📊 Telegram: GANTT chart request received (interpreted: '{text}')")
                                 try:
                                     if self.notifier and self.scheduled_orders:
                                         self.notifier.send_gantt_to_telegram(self.telegram_bot_token, self.telegram_chat_id, self.scheduled_orders)
@@ -157,6 +175,9 @@ class SimpleLineMonitor:
                                         print("   ✗ GANTT not available (missing notifier or scheduled_orders)")
                                 except Exception as e:
                                     print(f"   ✗ Failed to send Gantt: {e}")
+                            elif command == "UNKNOWN":
+                                # Silently ignore unknown commands
+                                pass
 
             except Exception as e:
                 # Silently continue on errors

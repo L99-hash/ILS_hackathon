@@ -204,9 +204,13 @@ Please select a planning policy:
    → Cap batch size (e.g., max 10 units)
    → Better for large orders
 
-Reply with: *1*, *2*, or *3*
-
-For option 3, you can also specify batch size: *3:15* (for max 15 units)"""
+💬 *Natural Language Supported!*
+You can reply with:
+• Numbers: *1*, *2*, *3* or *3:15* (with batch size)
+• Ordinals: "first", "second", "third" or "1st", "2nd", "3rd"
+• Words: "EDF", "group by product", "split in batches"
+• Phrases: "earliest deadline first", "merge same products", "batch size 20"
+"""
 
             notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, policy_prompt, None, None)
             print("\nWaiting for policy selection via Telegram...")
@@ -247,22 +251,20 @@ For option 3, you can also specify batch size: *3:15* (for max 15 units)"""
                                 if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
                                     text = msg.get("text", "").strip()
 
-                                    # Parse response: "1", "2", "3", or "3:15"
-                                    if ':' in text:
-                                        parts = text.split(':')
-                                        if parts[0] == '3' and parts[1].isdigit():
-                                            choice = '3'
-                                            batch_size = int(parts[1])
-                                            print(f"✓ Received: Policy 3 with batch size {batch_size}")
-                                            break
-                                    elif text in ['1', '2']:
-                                        choice = text
-                                        print(f"✓ Received: Policy {choice}")
+                                    # Use CommandMapper for natural language interpretation
+                                    interpreted_choice, interpreted_batch = command_mapper.interpret_policy(text)
+
+                                    if interpreted_choice in ['1', '2', '3']:
+                                        choice = interpreted_choice
+                                        if interpreted_batch:
+                                            batch_size = interpreted_batch
+                                            print(f"✓ Received: '{text}' → Policy {choice} with batch size {batch_size}")
+                                        else:
+                                            print(f"✓ Received: '{text}' → Policy {choice}")
                                         break
-                                    elif text == '3':
-                                        choice = '3'
-                                        print(f"✓ Received: Policy 3 (will ask for batch size)")
-                                        break
+                                    else:
+                                        # Ignore unrecognized messages
+                                        print(f"⚠ Could not interpret: '{text}' - please respond with 1, 2, or 3")
 
                     if choice:
                         break

@@ -1,12 +1,13 @@
 """
 Natural Language Command Interpreter using Gemini AI
 
-Maps user messages to predefined commands (CAPTURE, GANTT, etc.)
+Maps user messages to predefined commands (CAPTURE, GANTT, policy selection, etc.)
 """
 
 import os
+import re
 import google.generativeai as genai
-from typing import Optional, Literal
+from typing import Optional, Literal, Tuple
 
 
 class CommandMapper:
@@ -16,6 +17,7 @@ class CommandMapper:
     Supported commands:
     - CAPTURE: Take photo, capture frame, snap image, etc.
     - GANTT: Show schedule, production plan, timeline, etc.
+    - Policy selection: EDF, GROUP_BY_PRODUCT, SPLIT_IN_BATCHES
     - UNKNOWN: Anything else
     """
 
@@ -138,6 +140,108 @@ Respond with ONLY one word: CAPTURE, GANTT, or UNKNOWN (if neither)
             return "CAPTURE"
         elif "GANTT" in result:
             return "GANTT"
+        else:
+            return "UNKNOWN"
+
+    def interpret_policy(self, user_text: str) -> Tuple[str, Optional[int]]:
+        """
+        Interpret user's policy selection and extract batch size if applicable
+
+        Args:
+            user_text: The message from the user (e.g., "1", "EDF", "split batches", "3:15")
+
+        Returns:
+            Tuple of (policy_choice, batch_size)
+            - policy_choice: "1", "2", or "3"
+            - batch_size: int if policy 3 with custom size, else None
+        """
+        if not user_text or not user_text.strip():
+            return ("UNKNOWN", None)
+
+        text = user_text.strip()
+
+        # Check for batch size specification (e.g., "3:15" or "batch:20")
+        batch_size = None
+        batch_match = re.search(r'[:\s](\d+)', text)
+        if batch_match:
+            batch_size = int(batch_match.group(1))
+            # Remove batch size from text for policy interpretation
+            text = re.sub(r'[:\s]\d+', '', text).strip()
+
+        # Normalize input
+        normalized = text.upper()
+
+        # Check cache
+        cache_key = f"policy_{normalized}"
+        if cache_key in self.cache:
+            return (self.cache[cache_key], batch_size)
+
+        # Exact matching first (fast path)
+        if normalized in ["1", "FIRST", "1ST", "ONE", "EDF", "EARLIEST", "DEADLINE"]:
+            self.cache[cache_key] = "1"
+            return ("1", batch_size)
+        elif normalized in ["2", "SECOND", "2ND", "TWO", "GROUP", "MERGE", "PRODUCT"]:
+            self.cache[cache_key] = "2"
+            return ("2", batch_size)
+        elif normalized in ["3", "THIRD", "3RD", "THREE", "BATCH", "SPLIT", "BATCHES"]:
+            self.cache[cache_key] = "3"
+            return ("3", batch_size)
+
+        # Use Gemini AI for interpretation if enabled
+        if self.enabled:
+            try:
+                result = self._gemini_interpret_policy(text)
+                self.cache[cache_key] = result
+                return (result, batch_size)
+            except Exception as e:
+                print(f"⚠️ Gemini API error for policy interpretation: {e}")
+                return ("UNKNOWN", batch_size)
+
+        return ("UNKNOWN", batch_size)
+
+    def _gemini_interpret_policy(self, user_text: str) -> str:
+        """
+        Use Gemini AI to interpret the policy selection
+
+        Args:
+            user_text: Raw user message
+
+        Returns:
+            "1", "2", "3", or "UNKNOWN"
+        """
+        prompt = f"""You are interpreting a production planning policy selection.
+
+The user can choose from 3 policies:
+
+1. EDF (Earliest Deadline First)
+   Keywords: "EDF", "deadline", "earliest", "by deadline", "1"
+
+2. Group by Product
+   Keywords: "group", "merge", "by product", "same product", "2"
+
+3. Split in Batches
+   Keywords: "batch", "split", "batches", "cap size", "3"
+
+User message: "{user_text}"
+
+Respond with ONLY one character: 1, 2, or 3
+If you cannot determine the policy, respond with: UNKNOWN
+"""
+
+        response = self.model.generate_content(prompt)
+        result = response.text.strip().upper()
+
+        # Validate response
+        if result in ["1", "2", "3"]:
+            return result
+
+        # Try to extract from response
+        if "1" in result or "EDF" in result:
+            return "1"
+        elif "2" in result or "GROUP" in result:
+            return "2"
+        elif "3" in result or "BATCH" in result:
+            return "3"
         else:
             return "UNKNOWN"
 

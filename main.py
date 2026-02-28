@@ -844,7 +844,9 @@ Reply with:
 - *YES* to enable camera monitoring
 - *NO* to skip monitoring
 
-If YES, you'll be asked which camera(s) to use."""
+If YES, you'll be asked which camera(s) to use.
+
+💡 *Tip:* Once monitoring starts, send *CAPTURE* anytime to receive photos from all cameras on Telegram!"""
 
                         notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, monitoring_prompt, None, None)
                         print("\nWaiting for camera monitoring decision via Telegram...")
@@ -1031,6 +1033,18 @@ Example: *0,1* to use both camera 0 and 1"""
                         if telegram_bot_token and telegram_chat_id:
                             print("Send 'CAPTURE' via Telegram to take photos from all cameras!")
                         print()
+
+                        # Send camera monitoring start notification to Telegram
+                        if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
+                            camera_start_msg = f"""🎥 *Camera Monitoring Started*
+
+Monitoring camera(s): {', '.join(map(str, camera_indices))}
+
+📸 *To capture photos:* Send *CAPTURE* at any time to receive photos from all cameras on Telegram!
+
+The camera window is now open on your computer."""
+
+                            notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, camera_start_msg, None, None)
 
                         monitor = SimpleLineMonitor(
                             camera_indices=camera_indices,

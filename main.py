@@ -357,8 +357,82 @@ For option 3, you can also specify batch size: *3:15* (for max 15 units)"""
             product_map_by_extra = {}
             print()
 
-        # Confirm with user before creating
-        confirm = input(f"Create {len(production_orders)} production orders in Arke? (yes/no): ").strip().lower()
+        # Confirm with user before creating (via Telegram or console)
+        confirm = None
+
+        if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
+            # Send confirmation prompt to Telegram
+            confirmation_prompt = f"""📦 *STEP 3: Create Production Orders*
+
+Ready to create *{len(production_orders)}* production orders in Arke.
+
+Reply with:
+- *YES* to create the orders
+- *NO* to cancel"""
+
+            notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, confirmation_prompt, None, None)
+            print(f"\nWaiting for confirmation via Telegram to create {len(production_orders)} orders...")
+
+            # Wait for response
+            url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
+            start_time = time.time()
+            last_update_id = None
+            timeout = 300  # 5 minutes
+
+            # Get latest update_id
+            try:
+                response = requests.get(url, params={"offset": -1}, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                if data.get("ok") and data.get("result"):
+                    last_update_id = data["result"][-1]["update_id"]
+            except Exception as e:
+                print(f"Warning: Could not get initial update ID: {e}")
+
+            while time.time() - start_time < timeout:
+                try:
+                    params = {}
+                    if last_update_id is not None:
+                        params["offset"] = last_update_id + 1
+                    params["timeout"] = 10
+
+                    response = requests.get(url, params=params, timeout=15)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    if data.get("ok") and data.get("result"):
+                        for update in data["result"]:
+                            last_update_id = update["update_id"]
+
+                            if "message" in update:
+                                msg = update["message"]
+                                if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
+                                    text = msg.get("text", "").strip().upper()
+
+                                    if text in ['YES', 'Y']:
+                                        confirm = 'yes'
+                                        print("✓ Confirmed: Creating production orders")
+                                        break
+                                    elif text in ['NO', 'N']:
+                                        confirm = 'no'
+                                        print("✗ Cancelled: Production order creation")
+                                        break
+
+                    if confirm:
+                        break
+                    time.sleep(1)
+
+                except Exception as e:
+                    print(f"Error polling Telegram: {e}")
+                    time.sleep(2)
+
+            if not confirm:
+                print("⚠ Timeout: No response received. Cancelling production order creation.")
+                confirm = 'no'
+        else:
+            # Console input fallback
+            confirm = input(f"Create {len(production_orders)} production orders in Arke? (yes/no): ").strip().lower()
+
         if confirm not in ['yes', 'y']:
             print("Production order creation cancelled.")
             return

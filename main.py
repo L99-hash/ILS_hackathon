@@ -366,18 +366,11 @@ def main():
                 """
                 Schedule a phase respecting 8-hour workday (9 AM - 5 PM).
                 Work stops at 5 PM and resumes at 9 AM next day.
+                Uses partial days - if work doesn't fit in remaining time,
+                it starts today and continues tomorrow.
                 """
                 phase_start = start_time
-                remaining_in_day = WORKDAY_MINUTES - day_minutes_used
                 remaining_duration = duration_minutes
-
-                # If phase doesn't fit in remaining workday time, move to next day 9 AM
-                if remaining_duration > remaining_in_day:
-                    # Move to next day at 9 AM
-                    next_day = start_time + timedelta(days=1)
-                    phase_start = next_day.replace(hour=WORKDAY_START_HOUR, minute=0, second=0, microsecond=0)
-                    day_minutes_used = 0
-                    remaining_in_day = WORKDAY_MINUTES
 
                 # Calculate end time accounting for workday breaks (9 AM - 5 PM)
                 current_time = phase_start
@@ -392,7 +385,7 @@ def main():
                         current_day_used += remaining_duration
                         remaining_duration = 0
                     else:
-                        # Phase continues tomorrow at 9 AM
+                        # Use remaining time today, continue tomorrow at 9 AM
                         remaining_duration -= available_today
                         # Move to next workday at 9 AM
                         next_day = current_time + timedelta(days=1)
@@ -428,19 +421,29 @@ def main():
 
                     # Update production order dates (API will reschedule phases accordingly)
                     print(f"    → Setting: {production_start.strftime('%Y-%m-%d %H:%M')} to {production_end.strftime('%Y-%m-%d %H:%M')}")
-                    client.update_production_start_date(order_id, production_start.isoformat())
-                    client.update_production_end_date(order_id, production_end.isoformat())
+                    try:
+                        client.update_production_start_date(order_id, production_start.isoformat())
+                        client.update_production_end_date(order_id, production_end.isoformat())
 
-                    # Fetch updated production order
-                    scheduled_response = client.get_production_order(order_id)
-                    actual_start = scheduled_response.get('starts_at', 'N/A')[:16].replace('T', ' ')
-                    actual_end = scheduled_response.get('ends_at', 'N/A')[:16].replace('T', ' ')
-                    print(f"    ✓ Verified: {actual_start} to {actual_end}")
+                        # Fetch updated production order
+                        scheduled_response = client.get_production_order(order_id)
+                        actual_start = scheduled_response.get('starts_at', 'N/A')[:16].replace('T', ' ')
+                        actual_end = scheduled_response.get('ends_at', 'N/A')[:16].replace('T', ' ')
+                        print(f"    ✓ API returned: {actual_start} to {actual_end}")
+                    except Exception as update_error:
+                        print(f"    ⚠ Warning: Could not update API dates: {update_error}")
+                        scheduled_response = client.get_production_order(order_id)
+
+                    # Override API times with our calculated sequential times
+                    scheduled_response['starts_at'] = production_start.isoformat()
+                    scheduled_response['ends_at'] = production_end.isoformat()
+                    scheduled_response['duration'] = total_duration  # Store our calculated duration
 
                     # Next order starts when this one ends
                     next_phase_start = production_end
 
                     scheduled_orders.append((prod_order, scheduled_response))
+                    print(f"    ✓ Using calculated times: {production_start.strftime('%Y-%m-%d %H:%M')} to {production_end.strftime('%Y-%m-%d %H:%M')}")
                     print(f"  {i}/{len(created_orders)}: Scheduled - {prod_order.product_name} (ID: {order_id})")
                 except Exception as e:
                     print(f"  {i}/{len(created_orders)}: Failed to schedule {order_id}: {e}")

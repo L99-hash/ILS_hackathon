@@ -11,12 +11,13 @@ class ScheduleNotifier:
     """Sends production schedule to planner for approval"""
 
     @staticmethod
-    def build_gantt_chart(scheduled_orders: List):
+    def build_gantt_chart(scheduled_orders: List, policy_name: str = "EDF (Earliest Deadline First)"):
         """
         Build a Plotly Gantt chart from scheduled orders.
 
         Args:
             scheduled_orders: List of (ProductionOrder, scheduled_response) tuples
+            policy_name: Name of the scheduling policy used
 
         Returns:
             A Plotly Figure object, or None if no valid orders
@@ -78,7 +79,7 @@ class ScheduleNotifier:
             y="Task",
             color="Priority",
             hover_data=["SalesOrder", "Quantity", "Deadline", "OrderID"],
-            title="Production Schedule — EDF (Earliest Deadline First)",
+            title=f"Production Schedule — {policy_name}",
             labels={"Task": "Product", "Priority": "Priority"},
         )
 
@@ -198,13 +199,14 @@ class ScheduleNotifier:
 
 
     @staticmethod
-    def format_schedule_message(production_orders: List, scheduled_orders: List):
+    def format_schedule_message(production_orders: List, scheduled_orders: List, policy_name: str = "EDF (Earliest Deadline First)"):
         """
         Format production schedule for human approval
 
         Args:
             production_orders: List of ProductionOrder objects from planning
             scheduled_orders: List of (ProductionOrder, scheduled_response) tuples from API
+            policy_name: Name of the scheduling policy used
 
         Returns:
             Formatted message string
@@ -216,7 +218,7 @@ class ScheduleNotifier:
         message.append("=" * 60)
         message.append("")
         message.append(f"Total Orders: {len(scheduled_orders)}")
-        message.append(f"Scheduling Policy: EDF (Earliest Deadline First)")
+        message.append(f"Scheduling Policy: {policy_name}")
         message.append("")
 
         # Display schedule with actual start/end dates from phases

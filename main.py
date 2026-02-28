@@ -197,6 +197,7 @@ def main():
 
         # Apply selected planning policy
         planner = ProductionPlanner()
+        policy_name = ""  # Track which policy was selected
 
         if choice == '1':
             print("Applying LEVEL 1: EDF (Earliest Deadline First)")
@@ -204,6 +205,7 @@ def main():
             print()
             production_orders = planner.level1_edf(sales_order_lines)
             planner.display_production_plan(production_orders, "Level 1: EDF")
+            policy_name = "EDF (Earliest Deadline First)"
 
         elif choice == '2':
             print("Applying LEVEL 2: Group by Product")
@@ -211,6 +213,7 @@ def main():
             print()
             production_orders = planner.level2_group_by_product(sales_order_lines)
             planner.display_production_plan(production_orders, "Level 2: Group by Product")
+            policy_name = "Group by Product"
 
         elif choice == '3':
             batch_size = input("Enter maximum batch size (default 10): ").strip()
@@ -220,6 +223,7 @@ def main():
             print()
             production_orders = planner.level2_split_batches(sales_order_lines, batch_size)
             planner.display_production_plan(production_orders, f"Level 2: Split in Batches (max {batch_size})")
+            policy_name = f"Split in Batches (max {batch_size} units)"
 
         # Store production orders for next steps
         print()
@@ -517,8 +521,8 @@ def main():
                 rejection_reason = None
 
                 if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
-                    message, scheduled_orders = notifier.format_schedule_message(production_orders, scheduled_orders)
-                    fig = ScheduleNotifier.build_gantt_chart(scheduled_orders)
+                    message, scheduled_orders = notifier.format_schedule_message(production_orders, scheduled_orders, policy_name)
+                    fig = ScheduleNotifier.build_gantt_chart(scheduled_orders, policy_name)
                     print("\nSending schedule to Telegram...")
                     if notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message, scheduled_orders, fig):
                         # Wait for approval via Telegram
@@ -772,7 +776,7 @@ Please send your adjustment command:"""
                                         production_orders[idx1], production_orders[idx2] = production_orders[idx2], production_orders[idx1]
 
                                         result_msg = f"✓ Swapped orders {idx1+1} and {idx2+1}\n\nPlease review the updated schedule..."
-                                        fig = notifier.build_gantt_chart(scheduled_orders)
+                                        fig = notifier.build_gantt_chart(scheduled_orders, policy_name)
                                         notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg, scheduled_orders, fig)
 
                                         # Re-display and ask for approval again

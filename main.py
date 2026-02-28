@@ -37,32 +37,119 @@ def main():
         print(f"Successfully retrieved {len(sales_orders)} sales orders")
         print()
 
-        # Display orders
-        print("=" * 60)
-        print("SALES ORDERS:")
-        print("=" * 60)
-        print(json.dumps(sales_orders, indent=2))
+        # Fetch detailed information for each order (product and quantity)
+        print("Step 3: Fetching order details (products and quantities)...")
+        orders_with_details = []
+        for order in sales_orders:
+            order_id = order.get('id')
+            try:
+                details = client.get_sales_order_details(order_id)
+                order['details'] = details
+                orders_with_details.append(order)
+            except Exception as e:
+                print(f"Warning: Could not fetch details for {order.get('internal_id')}: {e}")
+                orders_with_details.append(order)
+
+        print(f"Successfully retrieved details for {len(orders_with_details)} orders")
+        print()
+
+        # Display complete order summary
+        print("=" * 80)
+        print("SALES ORDER SUMMARY (Sorted by Urgency - Earliest Deadline First)")
+        print("=" * 80)
+
+        # Sort by deadline
+        sorted_orders = sorted(orders_with_details, key=lambda x: x.get('expected_shipping_time', ''))
+
+        for i, order in enumerate(sorted_orders, 1):
+            internal_id = order.get('internal_id', 'N/A')
+            customer = order.get('customer_attr', {}).get('name', 'Unknown')
+            deadline = order.get('expected_shipping_time', 'N/A')[:16].replace('T', ' ')
+            priority = order.get('priority', 'N/A')
+
+            print(f"\n{i}. Order: {internal_id}")
+            print(f"   Customer: {customer}")
+            print(f"   Deadline: {deadline}")
+            print(f"   Priority: P{priority}")
+
+            # Extract product and quantity from order details
+            if 'details' in order and order['details']:
+                line_items = order['details'].get('line_items', [])
+                if line_items:
+                    print(f"   Products:")
+                    for item in line_items:
+                        product_name = item.get('product_attr', {}).get('name', 'Unknown Product')
+                        quantity = item.get('quantity', 'N/A')
+                        print(f"     - {product_name}: {quantity} units")
+                else:
+                    print(f"   Products: No line items found")
+            else:
+                print(f"   Products: Details not available")
+
+        print()
+        print("=" * 80)
         print()
 
         # Analyze for conflicts
         print("=" * 60)
         print("CONFLICT ANALYSIS:")
         print("=" * 60)
+        print()
 
-        # Look for SO-003 and SO-005 specifically
-        so_003 = next((order for order in sales_orders if order.get('id') == 'SO-003'), None)
-        so_005 = next((order for order in sales_orders if order.get('id') == 'SO-005'), None)
+        # Sort orders by deadline (EDF - Earliest Deadline First)
+        sorted_by_deadline = sorted(sales_orders, key=lambda x: x.get('expected_shipping_time', ''))
 
-        if so_003 and so_005:
-            print("\nKey conflict identified:")
-            print(f"  SO-003 (AgriBot):")
-            print(f"    - Deadline: {so_003.get('deadline')}")
-            print(f"    - Priority: {so_003.get('priority')}")
-            print(f"  SO-005 (SmartHome IoT):")
-            print(f"    - Deadline: {so_005.get('deadline')}")
-            print(f"    - Priority: {so_005.get('priority')}")
-            print("\nRecommendation: Use EDF (Earliest Deadline First) scheduling")
-            print("SO-003 should be scheduled before SO-005 despite lower priority")
+        # Sort orders by priority (higher priority first)
+        sorted_by_priority = sorted(sales_orders, key=lambda x: x.get('priority', 999))
+
+        print("Orders sorted by DEADLINE (EDF Strategy):")
+        print("-" * 60)
+        for i, order in enumerate(sorted_by_deadline[:5], 1):
+            customer = order.get('customer_attr', {}).get('name', 'Unknown')
+            deadline = order.get('expected_shipping_time', 'N/A')[:16].replace('T', ' ')  # Date and time
+            priority = order.get('priority', 'N/A')
+            internal_id = order.get('internal_id', 'N/A')
+            print(f"{i}. {internal_id} - {customer}")
+            print(f"   Deadline: {deadline}, Priority: P{priority}")
+
+        print()
+        print("Orders sorted by PRIORITY (Traditional Strategy):")
+        print("-" * 60)
+        for i, order in enumerate(sorted_by_priority[:5], 1):
+            customer = order.get('customer_attr', {}).get('name', 'Unknown')
+            deadline = order.get('expected_shipping_time', 'N/A')[:16].replace('T', ' ')  # Date and time
+            priority = order.get('priority', 'N/A')
+            internal_id = order.get('internal_id', 'N/A')
+            print(f"{i}. {internal_id} - {customer}")
+            print(f"   Deadline: {deadline}, Priority: P{priority}")
+
+        # Identify specific conflicts where priority and deadline disagree
+        print()
+        print("SCHEDULING CONFLICTS DETECTED:")
+        print("-" * 60)
+
+        conflicts_found = False
+        for i, deadline_order in enumerate(sorted_by_deadline):
+            priority_rank = sorted_by_priority.index(deadline_order)
+            if abs(i - priority_rank) > 2:  # Significant difference in ranking
+                customer = deadline_order.get('customer_attr', {}).get('name', 'Unknown')
+                deadline = deadline_order.get('expected_shipping_time', 'N/A')[:16].replace('T', ' ')
+                priority = deadline_order.get('priority', 'N/A')
+                internal_id = deadline_order.get('internal_id', 'N/A')
+                print(f"Conflict: {internal_id} - {customer}")
+                print(f"  Deadline rank: #{i+1}, Priority rank: #{priority_rank+1}")
+                print(f"  Deadline: {deadline}, Priority: P{priority}")
+                print()
+                conflicts_found = True
+
+        if not conflicts_found:
+            print("No significant conflicts detected.")
+
+        print()
+        print("RECOMMENDATION:")
+        print("-" * 60)
+        print("Use EDF (Earliest Deadline First) scheduling to minimize late deliveries.")
+        print("This ensures orders are completed by their deadline, regardless of priority.")
 
     except Exception as e:
         print(f"Error fetching sales orders: {e}")

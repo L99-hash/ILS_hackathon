@@ -93,6 +93,29 @@ class ArkeAPIClient:
             print(f"Error fetching sales orders: {e}")
             raise
 
+    def get_sales_order_details(self, order_id: str) -> Dict[str, Any]:
+        """
+        Fetch detailed information for a specific sales order
+
+        Args:
+            order_id: ID of the sales order
+
+        Returns:
+            Sales order details including line items (products and quantities)
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/sales/order/{order_id}"
+
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error fetching order details for {order_id}: {e}")
+            raise
+
     def create_production_order(self, order_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Create a production order in the Arke system

@@ -121,3 +121,4 @@ Thumbs.db
 # Configuration backups
 *.conf.backup
 config.backup.json
+efficient-net.pth

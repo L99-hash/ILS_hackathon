@@ -12,6 +12,7 @@ dependencies:
   - black
   - flake8
   - pandas
+  - timm
   - pip:
     - pydantic
     - httpx

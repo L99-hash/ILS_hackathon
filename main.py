@@ -831,37 +831,197 @@ Reply with:
                     print("=" * 80)
                     print()
 
-                    # Ask if user wants to enable camera monitoring
-                    enable_monitoring = input("Enable camera monitoring? (yes/no): ").strip().lower()
+                    # Ask if user wants to enable camera monitoring (via Telegram or console)
+                    enable_monitoring = None
+
+                    if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
+                        # Send monitoring prompt to Telegram
+                        monitoring_prompt = """📹 *STEP 6: Production Line Monitoring*
+
+Enable camera monitoring for the production line?
+
+Reply with:
+- *YES* to enable camera monitoring
+- *NO* to skip monitoring
+
+If YES, you'll be asked which camera(s) to use."""
+
+                        notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, monitoring_prompt, None, None)
+                        print("\nWaiting for camera monitoring decision via Telegram...")
+
+                        # Wait for response
+                        url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
+                        start_time = time.time()
+                        last_update_id = None
+                        timeout = 300
+
+                        # Get latest update_id
+                        try:
+                            response = requests.get(url, params={"offset": -1}, timeout=10)
+                            response.raise_for_status()
+                            data = response.json()
+                            if data.get("ok") and data.get("result"):
+                                last_update_id = data["result"][-1]["update_id"]
+                        except Exception as e:
+                            print(f"Warning: Could not get initial update ID: {e}")
+
+                        while time.time() - start_time < timeout:
+                            try:
+                                params = {}
+                                if last_update_id is not None:
+                                    params["offset"] = last_update_id + 1
+                                params["timeout"] = 10
+
+                                response = requests.get(url, params=params, timeout=15)
+                                response.raise_for_status()
+                                data = response.json()
+
+                                if data.get("ok") and data.get("result"):
+                                    for update in data["result"]:
+                                        last_update_id = update["update_id"]
+
+                                        if "message" in update:
+                                            msg = update["message"]
+                                            if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
+                                                text = msg.get("text", "").strip().upper()
+
+                                                if text in ['YES', 'Y']:
+                                                    enable_monitoring = 'yes'
+                                                    print("✓ Camera monitoring enabled")
+                                                    break
+                                                elif text in ['NO', 'N']:
+                                                    enable_monitoring = 'no'
+                                                    print("✗ Camera monitoring disabled")
+                                                    break
+
+                                if enable_monitoring:
+                                    break
+                                time.sleep(1)
+
+                            except Exception as e:
+                                print(f"Error polling Telegram: {e}")
+                                time.sleep(2)
+
+                        if not enable_monitoring:
+                            print("⚠ Timeout: Disabling camera monitoring")
+                            enable_monitoring = 'no'
+                    else:
+                        # Console input fallback
+                        enable_monitoring = input("Enable camera monitoring? (yes/no): ").strip().lower()
 
                     if enable_monitoring in ['yes', 'y']:
                         from src.monitoring.camera import SimpleLineMonitor
 
-                        # Ask which cameras to use
-                        camera_input = input("Which camera(s) to use? (0, 1, 2 or '0,1' for multiple): ").strip()
-                        # Strip quotes if user included them
-                        camera_input = camera_input.strip("'\"")
-
-                        # Parse camera indices
+                        # Ask which cameras to use (via Telegram or console)
                         camera_indices = []
-                        if ',' in camera_input:
-                            # Multiple cameras
-                            for idx_str in camera_input.split(','):
-                                try:
-                                    camera_indices.append(int(idx_str.strip()))
-                                except ValueError:
-                                    pass
-                        else:
-                            # Single camera
-                            try:
-                                camera_indices = [int(camera_input)]
-                            except ValueError:
-                                camera_indices = [0]
-                                print(f"Invalid input, using camera 0")
 
-                        if not camera_indices:
-                            camera_indices = [0]
-                            print(f"No valid cameras, using camera 0")
+                        if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
+                            camera_prompt = """📷 *Select Camera(s)*
+
+Which camera(s) would you like to use?
+
+Reply with:
+- *0* for camera 0 (default)
+- *1* for camera 1
+- *2* for camera 2
+- *0,1* for multiple cameras (comma-separated)
+
+Example: *0,1* to use both camera 0 and 1"""
+
+                            notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, camera_prompt, None, None)
+                            print("Waiting for camera selection via Telegram...")
+
+                            url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
+                            start_time = time.time()
+                            timeout = 300
+                            camera_received = False
+
+                            # Get latest update_id
+                            try:
+                                response = requests.get(url, params={"offset": -1}, timeout=10)
+                                response.raise_for_status()
+                                data = response.json()
+                                if data.get("ok") and data.get("result"):
+                                    last_update_id = data["result"][-1]["update_id"]
+                            except Exception as e:
+                                print(f"Warning: Could not get initial update ID: {e}")
+
+                            while time.time() - start_time < timeout:
+                                try:
+                                    params = {}
+                                    if last_update_id is not None:
+                                        params["offset"] = last_update_id + 1
+                                    params["timeout"] = 10
+
+                                    response = requests.get(url, params=params, timeout=15)
+                                    response.raise_for_status()
+                                    data = response.json()
+
+                                    if data.get("ok") and data.get("result"):
+                                        for update in data["result"]:
+                                            last_update_id = update["update_id"]
+
+                                            if "message" in update:
+                                                msg = update["message"]
+                                                if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
+                                                    camera_input = msg.get("text", "").strip()
+                                                    camera_input = camera_input.strip("'\"")
+
+                                                    # Parse camera indices
+                                                    if ',' in camera_input:
+                                                        # Multiple cameras
+                                                        for idx_str in camera_input.split(','):
+                                                            try:
+                                                                camera_indices.append(int(idx_str.strip()))
+                                                            except ValueError:
+                                                                pass
+                                                    else:
+                                                        # Single camera
+                                                        try:
+                                                            camera_indices = [int(camera_input)]
+                                                        except ValueError:
+                                                            pass
+
+                                                    if camera_indices:
+                                                        print(f"✓ Selected camera(s): {camera_indices}")
+                                                        camera_received = True
+                                                        break
+
+                                    if camera_received:
+                                        break
+                                    time.sleep(1)
+
+                                except Exception as e:
+                                    print(f"Error polling Telegram: {e}")
+                                    time.sleep(2)
+
+                            if not camera_indices:
+                                print("⚠ Timeout or invalid input: Using default camera 0")
+                                camera_indices = [0]
+                        else:
+                            # Console input fallback
+                            camera_input = input("Which camera(s) to use? (0, 1, 2 or '0,1' for multiple): ").strip()
+                            camera_input = camera_input.strip("'\"")
+
+                            # Parse camera indices
+                            if ',' in camera_input:
+                                # Multiple cameras
+                                for idx_str in camera_input.split(','):
+                                    try:
+                                        camera_indices.append(int(idx_str.strip()))
+                                    except ValueError:
+                                        pass
+                            else:
+                                # Single camera
+                                try:
+                                    camera_indices = [int(camera_input)]
+                                except ValueError:
+                                    camera_indices = [0]
+                                    print(f"Invalid input, using camera 0")
+
+                            if not camera_indices:
+                                camera_indices = [0]
+                                print(f"No valid cameras, using camera 0")
 
                         print(f"\nStarting camera monitoring (Camera(s): {camera_indices})...")
                         print("A window will open showing live production line feed")

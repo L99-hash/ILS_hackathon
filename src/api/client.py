@@ -256,7 +256,7 @@ class ArkeAPIClient:
         Moves order from 'scheduled' to 'in_progress'
         Sets first phase to 'ready_to_start'
 
-        Endpoint: POST /production/{id}/_start (confirmed via MCP API search)
+        Endpoint: POST /product/production/{id}/_start (confirmed via MCP API search)
 
         NOTE: Hackathon docs mention POST /production/{id}/_confirm but that
         endpoint does not exist in the actual Arke API. The MCP search confirms
@@ -271,7 +271,7 @@ class ArkeAPIClient:
         Raises:
             requests.RequestException: If the API request fails
         """
-        url = f"{self.base_url}/production/{production_id}/_start"
+        url = f"{self.base_url}/product/production/{production_id}/_start"
 
         try:
             response = self.session.post(url)

@@ -1,0 +1,16 @@
+name: novaboard-scheduling
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - requests
+  - python-dotenv
+  - pytest
+  - pytest-cov
+  - black
+  - flake8
+  - pip:
+    - pydantic
+    - httpx

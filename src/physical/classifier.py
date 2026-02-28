@@ -14,7 +14,7 @@ TARGET_CLASS = "Defective"        # Only used for inference
 
 EPOCHS = 5
 BATCH_SIZE = 32
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 5e-4
 VAL_SPLIT = 0.2
 
 # Enable training on Apple Silicon / GPU. CPU as a fallback

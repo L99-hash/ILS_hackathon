@@ -93,6 +93,7 @@ secrets.json
 # Saved images
 
 *.jpg
+*.zip
 
 # Build outputs
 dist/

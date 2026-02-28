@@ -319,19 +319,25 @@ def main():
             notifier = ScheduleNotifier()
             notifier.print_schedule(production_orders, created_orders)
 
-            # Optional: Send to Telegram
+            # Send to Telegram and wait for approval
             telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
             telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
 
-            if telegram_bot_token and telegram_chat_id:
+            approval = None
+            if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
                 message = notifier.format_schedule_message(production_orders, created_orders)
                 print("\nSending schedule to Telegram...")
-                notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message)
+                if notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message):
+                    # Wait for approval via Telegram
+                    approval = notifier.wait_for_telegram_approval(telegram_bot_token, telegram_chat_id)
+                    if approval == "TIMEOUT":
+                        print("\nFalling back to terminal input...")
+                        approval = None
 
-            print()
-
-            # Get approval from planner
-            approval = input("Planner approval (APPROVE/REJECT): ").strip().upper()
+            # Fallback to terminal input if Telegram not configured or timed out
+            if approval is None:
+                print()
+                approval = input("Planner approval (APPROVE/REJECT): ").strip().upper()
 
             if approval == "APPROVE":
                 print()

@@ -115,6 +115,90 @@ class ScheduleNotifier:
             return False
 
     @staticmethod
+    def wait_for_telegram_approval(bot_token: str, chat_id: str, timeout: int = 300) -> str:
+        """
+        Wait for user approval response via Telegram
+
+        Args:
+            bot_token: Telegram bot token from @BotFather
+            chat_id: Telegram chat ID to monitor
+            timeout: Maximum seconds to wait for response (default 300 = 5 minutes)
+
+        Returns:
+            'APPROVE' or 'REJECT' based on user response, or 'TIMEOUT' if no response
+        """
+        import requests
+        import time
+
+        if not bot_token or 'your_bot_token_here' in bot_token:
+            print("Error: No valid Telegram bot token configured.")
+            return 'TIMEOUT'
+
+        if not chat_id or 'your_chat_id_here' in chat_id:
+            print("Error: No valid Telegram chat ID configured.")
+            return 'TIMEOUT'
+
+        print(f"\nWaiting for approval via Telegram (timeout: {timeout}s)...")
+        print("Please respond in Telegram with 'APPROVE' or 'REJECT'")
+
+        url = f"https://api.telegram.org/bot{bot_token}/getUpdates"
+        start_time = time.time()
+        last_update_id = None
+
+        # Get the latest update_id to ignore old messages
+        try:
+            response = requests.get(url, params={"offset": -1}, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("ok") and data.get("result"):
+                last_update_id = data["result"][-1]["update_id"]
+        except Exception as e:
+            print(f"Warning: Could not get initial update ID: {e}")
+
+        # Poll for new messages
+        while time.time() - start_time < timeout:
+            try:
+                params = {}
+                if last_update_id is not None:
+                    params["offset"] = last_update_id + 1
+                params["timeout"] = 10  # Long polling timeout
+
+                response = requests.get(url, params=params, timeout=15)
+                response.raise_for_status()
+                data = response.json()
+
+                if data.get("ok") and data.get("result"):
+                    for update in data["result"]:
+                        last_update_id = update["update_id"]
+
+                        # Check if it's a message from the correct chat
+                        if "message" in update:
+                            msg = update["message"]
+                            if str(msg.get("chat", {}).get("id")) == str(chat_id):
+                                text = msg.get("text", "").strip().upper()
+
+                                if text == "APPROVE":
+                                    print("\n✓ Schedule APPROVED via Telegram")
+                                    return "APPROVE"
+                                elif text == "REJECT":
+                                    print("\n✗ Schedule REJECTED via Telegram")
+                                    return "REJECT"
+                                elif text in ["APPROVE", "REJECT"]:
+                                    # In case there are variations
+                                    print(f"\nReceived: {text}")
+                                    return text
+
+                # Small delay to avoid hammering the API
+                time.sleep(1)
+
+            except Exception as e:
+                print(f"Error polling Telegram: {e}")
+                time.sleep(2)
+
+        print(f"\n⚠ Timeout: No response received within {timeout} seconds")
+        return "TIMEOUT"
+
+    @staticmethod
     def send_to_webhook(webhook_url: str, message: str) -> bool:
         """
         Send message to webhook (Slack, Discord, etc.)

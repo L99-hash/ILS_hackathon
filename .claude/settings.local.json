@@ -5,7 +5,10 @@
       "Bash(python3:*)",
       "Bash(curl:*)",
       "Bash(source:*)",
-      "Bash(conda activate:*)"
+      "Bash(conda activate:*)",
+      "Bash(pip install:*)",
+      "Bash(python test_camera.py:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

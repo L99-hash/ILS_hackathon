@@ -11,6 +11,7 @@ from src.scheduler.planner import ProductionPlanner
 from src.messaging.notifier import ScheduleNotifier
 import json
 import os
+import time
 
 
 def main():
@@ -414,6 +415,92 @@ def main():
                     print(f"  Ready for: Step 6-7 (Physical Integration)")
                     print("=" * 60)
                     print()
+
+                    # STEP 6: Physical Integration - Camera Monitoring
+                    print("\n" + "=" * 80)
+                    print("STEP 6: PHYSICAL INTEGRATION - PRODUCTION LINE MONITORING")
+                    print("=" * 80)
+                    print()
+
+                    # Ask if user wants to enable camera monitoring
+                    enable_monitoring = input("Enable camera monitoring? (yes/no): ").strip().lower()
+
+                    if enable_monitoring in ['yes', 'y']:
+                        from src.monitoring.camera import SimpleLineMonitor
+
+                        # Ask which camera to use
+                        camera_index = input("Which camera to use? (0, 1, or 2): ").strip()
+                        try:
+                            camera_index = int(camera_index)
+                        except ValueError:
+                            camera_index = 0
+                            print(f"Invalid input, using camera 0")
+
+                        print(f"\nStarting camera monitoring (Camera {camera_index})...")
+                        print("A window will open showing live production line feed")
+                        print("Press 'q' in the camera window to stop monitoring a phase")
+                        if telegram_bot_token and telegram_chat_id:
+                            print("Send 'CAPTURE' via Telegram to take a photo anytime!")
+                        print()
+
+                        monitor = SimpleLineMonitor(
+                            camera_index=camera_index,
+                            telegram_bot_token=telegram_bot_token,
+                            telegram_chat_id=telegram_chat_id
+                        )
+
+                        try:
+                            monitor.start_camera()
+
+                            # Monitor each production order
+                            for prod_order, scheduled_response in scheduled_orders:
+                                order_id = scheduled_response.get('id')
+                                phases = scheduled_response.get('phases', [])
+
+                                if not phases:
+                                    print(f"\nNo phases found for {prod_order.product_name}, skipping...")
+                                    continue
+
+                                print(f"\n{'='*60}")
+                                print(f"Monitoring Order: {prod_order.product_name}")
+                                print(f"Order ID: {order_id}")
+                                print(f"Phases: {len(phases)}")
+                                print(f"{'='*60}")
+
+                                # Monitor each phase
+                                for i, phase in enumerate(phases, 1):
+                                    phase_name = phase.get('name', f'Phase {i}')
+
+                                    print(f"\n[{i}/{len(phases)}] Monitoring phase: {phase_name}")
+
+                                    # Monitor for 30 seconds per phase (adjust as needed)
+                                    monitor.monitor_phase(
+                                        phase_name=phase_name,
+                                        order_id=order_id,
+                                        duration_seconds=30,
+                                        save_interval=10
+                                    )
+
+                                    # Brief pause between phases
+                                    if i < len(phases):
+                                        print("\nPreparing next phase...")
+                                        time.sleep(2)
+
+                            print("\n" + "=" * 80)
+                            print("CAMERA MONITORING COMPLETE")
+                            print("=" * 80)
+                            print(f"Frames saved in: monitoring_frames/")
+                            print()
+
+                        except Exception as e:
+                            print(f"\nError during monitoring: {e}")
+                            print("Continuing without monitoring...")
+
+                        finally:
+                            monitor.stop_camera()
+                    else:
+                        print("Camera monitoring skipped")
+                        print()
 
                 else:  # REJECT - continue loop with adjustments
                     print()

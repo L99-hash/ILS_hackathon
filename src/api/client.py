@@ -175,56 +175,116 @@ class ArkeAPIClient:
             print(f"Error creating production order: {e}")
             raise
 
-    def confirm_production_order(self, production_id: str) -> Dict[str, Any]:
+    def schedule_production_order(self, production_id: str) -> Dict[str, Any]:
         """
-        Confirm a production order and move it to in_progress status
-        This unlocks the first phase to ready-to-start
+        STEP 4: Schedule a production order and generate phase sequence
+        This creates the production phases with timing
+        Endpoint: POST /product/production/{id}/_schedule
 
         Args:
             production_id: ID of the production order
 
         Returns:
-            Confirmation response
+            Scheduling response with phases
 
         Raises:
             requests.RequestException: If the API request fails
         """
-        url = f"{self.base_url}/product/production/{production_id}/_confirm"
+        url = f"{self.base_url}/product/production/{production_id}/_schedule"
 
         try:
             response = self.session.post(url)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
-            print(f"Error confirming production order {production_id}: {e}")
+            print(f"Error scheduling production order {production_id}: {e}")
             raise
 
-    def schedule_production_phases(self, production_id: str) -> Dict[str, Any]:
+    def update_phase_start_date(self, phase_id: str, start_date: str) -> Dict[str, Any]:
         """
-        Generate phase sequence for a production order
+        Update starting date of a production order phase (OPTIONAL - Step 4)
+        Use this to manually adjust phase timing if needed
+
+        Args:
+            phase_id: ID of the production order phase
+            start_date: New start date in ISO format
+
+        Returns:
+            Update response
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/production-order-phase/{phase_id}/_update_starting_date"
+
+        try:
+            response = self.session.post(url, json={"starting_date": start_date})
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error updating phase start date: {e}")
+            raise
+
+    def update_phase_end_date(self, phase_id: str, end_date: str) -> Dict[str, Any]:
+        """
+        Update ending date of a production order phase (OPTIONAL - Step 4)
+        Use this to manually adjust phase timing if needed
+
+        Args:
+            phase_id: ID of the production order phase
+            end_date: New end date in ISO format
+
+        Returns:
+            Update response
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/production-order-phase/{phase_id}/_update_ending_date"
+
+        try:
+            response = self.session.post(url, json={"ending_date": end_date})
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error updating phase end date: {e}")
+            raise
+
+    def confirm_production_order(self, production_id: str) -> Dict[str, Any]:
+        """
+        STEP 5: Start production order after human approval
+        Moves order from 'scheduled' to 'in_progress'
+        Sets first phase to 'ready_to_start'
+
+        Endpoint: POST /production/{id}/_start (confirmed via MCP API search)
+
+        NOTE: Hackathon docs mention POST /production/{id}/_confirm but that
+        endpoint does not exist in the actual Arke API. The MCP search confirms
+        that _start is the correct endpoint to move from 'scheduled' → 'in_progress'.
 
         Args:
             production_id: ID of the production order
 
         Returns:
-            Phase sequence response
+            Production order with updated status
 
         Raises:
             requests.RequestException: If the API request fails
         """
-        url = f"{self.base_url}/production/{production_id}/_schedule"
+        url = f"{self.base_url}/production/{production_id}/_start"
 
         try:
             response = self.session.post(url)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
-            print(f"Error scheduling production phases: {e}")
+            print(f"Error starting production order {production_id}: {e}")
             raise
 
     def start_phase(self, phase_id: str) -> Dict[str, Any]:
         """
-        Start a production order phase
+        STEP 6+: Start a production order phase
+        Moves phase from 'ready' to 'started'
 
         Args:
             phase_id: ID of the production order phase

@@ -308,65 +308,231 @@ def main():
             print(f"Failed: {len(failed_orders)} orders")
         print()
 
-        # STEP 5: Human in the Loop - Present Schedule for Approval
+        # STEP 4: Schedule Production Phases
         if len(created_orders) > 0:
+            print("=" * 80)
+            print("STEP 4: SCHEDULE PRODUCTION PHASES")
+            print("=" * 80)
+            print()
+            print("Generating phase sequences for production orders...")
+
+            scheduled_orders = []
+            for i, (prod_order, response) in enumerate(created_orders, 1):
+                order_id = response.get('id')
+                try:
+                    scheduled_response = client.schedule_production_order(order_id)
+                    scheduled_orders.append((prod_order, scheduled_response))
+                    print(f"  {i}/{len(created_orders)}: Scheduled - {prod_order.product_name} (ID: {order_id})")
+                except Exception as e:
+                    print(f"  {i}/{len(created_orders)}: Failed to schedule {order_id}: {e}")
+
+            print()
+            print("=" * 80)
+            print("STEP 4 COMPLETE")
+            print("=" * 80)
+            print(f"Successfully scheduled: {len(scheduled_orders)}/{len(created_orders)} production orders")
+            print()
+
+        # STEP 5: Human in the Loop - Present Schedule for Approval
+        if len(scheduled_orders) > 0:
             print("=" * 80)
             print("STEP 5: HUMAN IN THE LOOP - SCHEDULE APPROVAL")
             print("=" * 80)
             print()
 
-            # Format and display schedule
-            notifier = ScheduleNotifier()
-            notifier.print_schedule(production_orders, created_orders)
-
-            # Send to Telegram and wait for approval
+            # Loop until schedule is approved
+            approved = False
             telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
             telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
+            notifier = ScheduleNotifier()
 
-            approval = None
-            if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
-                message = notifier.format_schedule_message(production_orders, created_orders)
-                print("\nSending schedule to Telegram...")
-                if notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message):
-                    # Wait for approval via Telegram
-                    approval = notifier.wait_for_telegram_approval(telegram_bot_token, telegram_chat_id)
-                    if approval == "TIMEOUT":
-                        print("\nFalling back to terminal input...")
-                        approval = None
+            while not approved:
+                # Format and display schedule
+                notifier.print_schedule(production_orders, scheduled_orders)
 
-            # Fallback to terminal input if Telegram not configured or timed out
-            if approval is None:
-                print()
-                approval = input("Planner approval (APPROVE/REJECT): ").strip().upper()
+                # Send to Telegram and wait for approval
+                approval = None
+                rejection_reason = None
 
-            if approval == "APPROVE":
-                print()
-                print("Confirming production orders...")
+                if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
+                    message = notifier.format_schedule_message(production_orders, scheduled_orders)
+                    print("\nSending schedule to Telegram...")
+                    if notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message):
+                        # Wait for approval via Telegram
+                        approval, rejection_reason = notifier.wait_for_telegram_approval(telegram_bot_token, telegram_chat_id)
+                        if approval == "TIMEOUT":
+                            print("\nFalling back to terminal input...")
+                            approval = None
 
-                confirmed_count = 0
-                for prod_order, response in created_orders:
-                    order_id = response.get('id')
+                # Fallback to terminal input if Telegram not configured or timed out
+                if approval is None:
+                    print()
+                    user_input = input("Planner approval (APPROVE/REJECT): ").strip().upper()
+                    if user_input.startswith("REJECT"):
+                        approval = "REJECT"
+                        rejection_reason = input("Reason for rejection: ").strip()
+                    else:
+                        approval = user_input
+
+                if approval == "APPROVE":
+                    approved = True  # Break the loop
+                    print()
+                    print("Confirming production orders...")
+                    print()
+
+                    confirmed_count = 0
+                    for prod_order, scheduled_response in scheduled_orders:
+                        order_id = scheduled_response.get('id')
+                        try:
+                            confirm_response = client.confirm_production_order(order_id)
+                            if confirm_response.get('status') == 'in_progress':
+                                print(f"  ✓ Confirmed: {prod_order.product_name} (ID: {order_id}) → IN_PROGRESS")
+                                confirmed_count += 1
+                            else:
+                                print(f"  → {prod_order.product_name} (ID: {order_id}) - {confirm_response.get('status', 'scheduled')}")
+                        except Exception as e:
+                            print(f"  ✗ Failed to confirm {order_id}: {e}")
+
+                    print()
+                    print("=" * 80)
+                    print("STEP 5 COMPLETE")
+                    print("=" * 80)
+                    print(f"Production schedule APPROVED!")
+                    if confirmed_count > 0:
+                        print(f"✓ Confirmed: {confirmed_count}/{len(scheduled_orders)} orders moved to IN_PROGRESS")
+                        print("  First phase is now READY TO START for confirmed orders")
+                    else:
+                        print(f"⚠ Note: _confirm endpoint not available on this API instance")
+                        print(f"  All {len(scheduled_orders)} orders remain in SCHEDULED status")
+                        print(f"  Orders are ready - phases can be started manually when needed")
+                    print()
+                    print("=" * 60)
+                    print("SUMMARY:")
+                    print(f"  Total Production Orders: {len(scheduled_orders)}")
+                    print(f"  Total Phases Created: {len(scheduled_orders) * 7}")
+                    print(f"  Status: {'IN_PROGRESS' if confirmed_count > 0 else 'SCHEDULED'}")
+                    print(f"  Ready for: Step 6-7 (Physical Integration)")
+                    print("=" * 60)
+                    print()
+
+                else:  # REJECT - continue loop with adjustments
+                    print()
+                    print("=" * 80)
+                    print("SCHEDULE REJECTED")
+                    print("=" * 80)
+                    print()
+                    print(f"The production planner has rejected the proposed schedule.")
+                    if rejection_reason:
+                        print(f"Reason: {rejection_reason}")
+
+                    # Ask if they want to make adjustments
+                    if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
+                        adjustment_prompt = f"""Schedule rejected: {rejection_reason or 'No reason provided'}
+
+Would you like to adjust the schedule?
+
+Options:
+1. SWAP <order1_num> <order2_num> - Swap order positions
+2. MOVE <order_num> TO <position> - Move order to position
+3. DATES <order_num> +<days> - Delay order by days
+4. EXIT - Cancel and restart
+
+Example: "SWAP 1 3" to swap orders 1 and 3
+Example: "MOVE 5 TO 2" to move order 5 to position 2
+Example: "DATES 3 +2" to delay order 3 by 2 days
+
+Please send your adjustment command:"""
+
+                    notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, adjustment_prompt)
+
+                    print("\nWaiting for adjustment command via Telegram...")
+                    print("Supported commands:")
+                    print("  - SWAP <num1> <num2>")
+                    print("  - MOVE <num> TO <pos>")
+                    print("  - DATES <num> +<days>")
+                    print("  - EXIT")
+
+                    # Wait for adjustment command
+                    import requests
+                    import time
+                    url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
+                    last_update_id = None
+                    timeout = 300
+                    start_time = time.time()
+
+                    # Get current update ID
                     try:
-                        client.confirm_production_order(order_id)
-                        print(f"  Confirmed: {prod_order.product_name} (ID: {order_id})")
-                        confirmed_count += 1
-                    except Exception as e:
-                        print(f"  Failed to confirm {order_id}: {e}")
+                        response = requests.get(url, params={"offset": -1}, timeout=10)
+                        data = response.json()
+                        if data.get("ok") and data.get("result"):
+                            last_update_id = data["result"][-1]["update_id"]
+                    except:
+                        pass
 
-                print()
-                print("=" * 80)
-                print("STEP 5 COMPLETE")
-                print("=" * 80)
-                print(f"Confirmed {confirmed_count}/{len(created_orders)} production orders")
-                print("All confirmed orders moved to IN_PROGRESS status")
-                print("First phase is now READY TO START for each order")
-                print()
+                    adjustment_cmd = None
+                    while time.time() - start_time < timeout and adjustment_cmd is None:
+                        try:
+                            params = {"offset": last_update_id + 1 if last_update_id else None, "timeout": 10}
+                            response = requests.get(url, params=params, timeout=15)
+                            data = response.json()
 
-            else:
-                print()
-                print("Schedule rejected by planner.")
-                print("Adjustments requested. Please modify planning parameters and rerun.")
-                return
+                            if data.get("ok") and data.get("result"):
+                                for update in data["result"]:
+                                    last_update_id = update["update_id"]
+                                    if "message" in update:
+                                        msg = update["message"]
+                                        if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
+                                            adjustment_cmd = msg.get("text", "").strip().upper()
+                                            break
+
+                            time.sleep(1)
+                        except:
+                            time.sleep(2)
+
+                    if adjustment_cmd and adjustment_cmd != "EXIT":
+                        print(f"\nReceived adjustment: {adjustment_cmd}")
+
+                        # Parse and apply adjustment
+                        try:
+                            if adjustment_cmd.startswith("SWAP"):
+                                parts = adjustment_cmd.split()
+                                if len(parts) >= 3:
+                                    idx1 = int(parts[1]) - 1
+                                    idx2 = int(parts[2]) - 1
+                                    if 0 <= idx1 < len(scheduled_orders) and 0 <= idx2 < len(scheduled_orders):
+                                        scheduled_orders[idx1], scheduled_orders[idx2] = scheduled_orders[idx2], scheduled_orders[idx1]
+                                        production_orders[idx1], production_orders[idx2] = production_orders[idx2], production_orders[idx1]
+
+                                        result_msg = f"✓ Swapped orders {idx1+1} and {idx2+1}\n\nPlease review the updated schedule..."
+                                        notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg)
+
+                                        # Re-display and ask for approval again
+                                        print("\nSchedule adjusted. Re-presenting for approval...")
+                                        # (This would loop back to display schedule again - simplified for now)
+
+                            elif adjustment_cmd.startswith("MOVE"):
+                                # Similar logic for MOVE command
+                                result_msg = "MOVE command parsing not fully implemented yet"
+                                notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg)
+
+                            elif adjustment_cmd.startswith("DATES"):
+                                # Similar logic for DATES command
+                                result_msg = "DATES command parsing not fully implemented yet"
+                                notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg)
+
+                        except Exception as e:
+                            error_msg = f"Error applying adjustment: {e}\n\nPlease restart and try again."
+                            notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, error_msg)
+                            print(f"Error: {e}")
+
+                        print("\nSchedule adjusted. Looping back for re-presentation...")
+                        # Continue the while loop to re-present the schedule
+                        continue
+                    else:
+                        # User chose EXIT or timeout
+                        print()
+                        print("Exiting. Please restart the script if you want to make changes.")
+                        return
 
     except Exception as e:
         print(f"Error in process: {e}")

@@ -245,6 +245,91 @@ If you cannot determine the policy, respond with: UNKNOWN
         else:
             return "UNKNOWN"
 
+    def interpret_confirmation(self, user_text: str) -> Literal["YES", "NO", "UNKNOWN"]:
+        """
+        Interpret user's confirmation response (YES/NO)
+
+        Args:
+            user_text: The message from the user (e.g., "yes", "sure", "go ahead", "no", "cancel")
+
+        Returns:
+            "YES", "NO", or "UNKNOWN"
+        """
+        if not user_text or not user_text.strip():
+            return "UNKNOWN"
+
+        # Normalize input
+        normalized = user_text.strip().upper()
+
+        # Check cache
+        cache_key = f"confirm_{normalized}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        # Exact matching first (fast path)
+        # YES variations
+        if normalized in ["YES", "Y", "YEP", "YEAH", "YA", "SURE", "OK", "OKAY", "CONFIRM", "CONFIRMED",
+                         "GO", "GO AHEAD", "PROCEED", "CONTINUE", "DO IT", "APPROVE", "APPROVED",
+                         "ACCEPT", "ACCEPTED", "AGREE", "AFFIRMATIVE", "👍", "✓", "✅"]:
+            self.cache[cache_key] = "YES"
+            return "YES"
+
+        # NO variations
+        elif normalized in ["NO", "N", "NOPE", "NAH", "NAH", "CANCEL", "CANCELLED", "STOP", "ABORT",
+                           "REJECT", "REJECTED", "DECLINE", "DECLINED", "DISAGREE", "NEGATIVE",
+                           "DENY", "DENIED", "👎", "❌", "✗"]:
+            self.cache[cache_key] = "NO"
+            return "NO"
+
+        # Use Gemini AI for interpretation if enabled
+        if self.enabled:
+            try:
+                result = self._gemini_interpret_confirmation(user_text)
+                self.cache[cache_key] = result
+                return result
+            except Exception as e:
+                print(f"⚠️ Gemini API error for confirmation interpretation: {e}")
+                return "UNKNOWN"
+
+        return "UNKNOWN"
+
+    def _gemini_interpret_confirmation(self, user_text: str) -> Literal["YES", "NO", "UNKNOWN"]:
+        """
+        Use Gemini AI to interpret the confirmation response
+
+        Args:
+            user_text: Raw user message
+
+        Returns:
+            "YES", "NO", or "UNKNOWN"
+        """
+        prompt = f"""You are interpreting a YES/NO confirmation response.
+
+The user is being asked to confirm an action (like creating production orders).
+
+YES responses include: "yes", "sure", "go ahead", "confirm", "do it", "ok", "proceed", "I agree"
+NO responses include: "no", "cancel", "stop", "don't", "nope", "abort", "reject", "I disagree"
+
+User message: "{user_text}"
+
+Respond with ONLY one word: YES, NO, or UNKNOWN (if unclear)
+"""
+
+        response = self.model.generate_content(prompt)
+        result = response.text.strip().upper()
+
+        # Validate response
+        if result in ["YES", "NO", "UNKNOWN"]:
+            return result
+
+        # Try to extract from response
+        if "YES" in result or "CONFIRM" in result or "APPROVE" in result:
+            return "YES"
+        elif "NO" in result or "CANCEL" in result or "REJECT" in result:
+            return "NO"
+        else:
+            return "UNKNOWN"
+
     def clear_cache(self):
         """Clear the command interpretation cache"""
         self.cache.clear()

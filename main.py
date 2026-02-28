@@ -263,8 +263,18 @@ You can reply with:
                                             print(f"✓ Received: '{text}' → Policy {choice}")
                                         break
                                     else:
-                                        # Ignore unrecognized messages
-                                        print(f"⚠ Could not interpret: '{text}' - please respond with 1, 2, or 3")
+                                        # Not recognized - ask again with the same prompt
+                                        print(f"⚠ Could not interpret: '{text}'")
+                                        retry_prompt = """❓ *Please select a planning policy*
+
+I didn't understand your response. Please reply with:
+*1* - EDF (Earliest Deadline First)
+*2* - Group by Product
+*3* - Split in Batches
+
+Or use natural language like "first", "group by product", "batch size 20"
+"""
+                                        notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, retry_prompt, None, None)
 
                     if choice:
                         break
@@ -445,9 +455,11 @@ Or reply *10* to use the default."""
 
 Ready to create *{len(production_orders)}* production orders in Arke.
 
-Reply with:
-- *YES* to create the orders
-- *NO* to cancel"""
+💬 *Natural Language Supported!*
+You can reply with:
+• *YES*, "sure", "go ahead", "confirm", "ok", "proceed"
+• *NO*, "cancel", "stop", "nope", "abort"
+"""
 
             notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, confirmation_prompt, None, None)
             print(f"\nWaiting for confirmation via Telegram to create {len(production_orders)} orders...")
@@ -486,16 +498,28 @@ Reply with:
                             if "message" in update:
                                 msg = update["message"]
                                 if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
-                                    text = msg.get("text", "").strip().upper()
+                                    text = msg.get("text", "").strip()
 
-                                    if text in ['YES', 'Y']:
+                                    # Use CommandMapper for natural language interpretation
+                                    interpreted = command_mapper.interpret_confirmation(text)
+
+                                    if interpreted == "YES":
                                         confirm = 'yes'
-                                        print("✓ Confirmed: Creating production orders")
+                                        print(f"✓ Received: '{text}' → YES (Creating production orders)")
                                         break
-                                    elif text in ['NO', 'N']:
+                                    elif interpreted == "NO":
                                         confirm = 'no'
-                                        print("✗ Cancelled: Production order creation")
+                                        print(f"✗ Received: '{text}' → NO (Cancelled)")
                                         break
+                                    else:
+                                        # Not recognized - ask again
+                                        print(f"⚠ Could not interpret: '{text}'")
+                                        retry_prompt = """❓ *Please confirm*
+
+I didn't understand your response. Please reply with:
+• *YES* to create the orders
+• *NO* to cancel"""
+                                        notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, retry_prompt, None, None)
 
                     if confirm:
                         break

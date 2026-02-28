@@ -250,9 +250,13 @@ For option 3, you can also specify batch size: *3:15* (for max 15 units)"""
                                             batch_size = int(parts[1])
                                             print(f"✓ Received: Policy 3 with batch size {batch_size}")
                                             break
-                                    elif text in ['1', '2', '3']:
+                                    elif text in ['1', '2']:
                                         choice = text
                                         print(f"✓ Received: Policy {choice}")
+                                        break
+                                    elif text == '3':
+                                        choice = '3'
+                                        print(f"✓ Received: Policy 3 (will ask for batch size)")
                                         break
 
                     if choice:
@@ -266,6 +270,75 @@ For option 3, you can also specify batch size: *3:15* (for max 15 units)"""
             if not choice:
                 print("⚠ Timeout: No response received. Defaulting to Policy 1 (EDF)")
                 choice = '1'
+
+            # If policy 3 was selected without batch size, ask for it via Telegram
+            if choice == '3' and batch_size == 10:  # Default value means not specified
+                batch_prompt = """📏 *Enter Batch Size*
+
+You selected Policy 3 (Split in Batches).
+
+Please enter the maximum batch size (number).
+
+Example: *15* for max 15 units per batch
+
+Or reply *10* to use the default."""
+
+                notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, batch_prompt, None, None)
+                print("\nWaiting for batch size via Telegram...")
+
+                url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
+                start_time = time.time()
+                batch_received = False
+                timeout = 300
+
+                # Get latest update_id
+                try:
+                    response = requests.get(url, params={"offset": -1}, timeout=10)
+                    response.raise_for_status()
+                    data = response.json()
+                    if data.get("ok") and data.get("result"):
+                        last_update_id = data["result"][-1]["update_id"]
+                except Exception as e:
+                    print(f"Warning: Could not get initial update ID: {e}")
+
+                while time.time() - start_time < timeout:
+                    try:
+                        params = {}
+                        if last_update_id is not None:
+                            params["offset"] = last_update_id + 1
+                        params["timeout"] = 10
+
+                        response = requests.get(url, params=params, timeout=15)
+                        response.raise_for_status()
+                        data = response.json()
+
+                        if data.get("ok") and data.get("result"):
+                            for update in data["result"]:
+                                last_update_id = update["update_id"]
+
+                                if "message" in update:
+                                    msg = update["message"]
+                                    if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
+                                        text = msg.get("text", "").strip()
+
+                                        if text.isdigit():
+                                            batch_size = int(text)
+                                            print(f"✓ Received batch size: {batch_size}")
+                                            batch_received = True
+                                            break
+
+                        if batch_received:
+                            break
+                        time.sleep(1)
+
+                    except Exception as e:
+                        print(f"Error polling Telegram: {e}")
+                        time.sleep(2)
+
+                if not batch_received:
+                    print("⚠ Timeout: Using default batch size of 10")
+                    batch_size = 10
+
         else:
             # Console input fallback
             while True:
@@ -316,8 +389,7 @@ For option 3, you can also specify batch size: *3:15* (for max 15 units)"""
             policy_name = "Group by Product"
 
         elif choice == '3':
-            batch_size = input("Enter maximum batch size (default 10): ").strip()
-            batch_size = int(batch_size) if batch_size.isdigit() else 10
+            # batch_size already obtained via Telegram or console earlier
             print(f"\nApplying LEVEL 2: Split in Batches (max {batch_size} units)")
             print("Splitting large orders into smaller batches")
             print()

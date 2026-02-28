@@ -355,11 +355,9 @@ def main():
                 rejection_reason = None
 
                 if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
-                    message = notifier.format_schedule_message(production_orders, scheduled_orders)
                     message, scheduled_orders = notifier.format_schedule_message(production_orders, scheduled_orders)
                     fig = ScheduleNotifier.build_gantt_chart(scheduled_orders)
                     print("\nSending schedule to Telegram...")
-                    if notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message):
                     if notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, message, scheduled_orders, fig):
                         # Wait for approval via Telegram
                         approval, rejection_reason = notifier.wait_for_telegram_approval(telegram_bot_token, telegram_chat_id)
@@ -446,7 +444,6 @@ Example: "DATES 3 +2" to delay order 3 by 2 days
 
 Please send your adjustment command:"""
 
-                    notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, adjustment_prompt)
                     notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, adjustment_prompt, None, None)
 
                     print("\nWaiting for adjustment command via Telegram...")
@@ -508,7 +505,6 @@ Please send your adjustment command:"""
                                         production_orders[idx1], production_orders[idx2] = production_orders[idx2], production_orders[idx1]
 
                                         result_msg = f"✓ Swapped orders {idx1+1} and {idx2+1}\n\nPlease review the updated schedule..."
-                                        notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg)
                                         fig = notifier.build_gantt_chart(scheduled_orders)
                                         notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg, scheduled_orders, fig)
 
@@ -519,18 +515,15 @@ Please send your adjustment command:"""
                             elif adjustment_cmd.startswith("MOVE"):
                                 # Similar logic for MOVE command
                                 result_msg = "MOVE command parsing not fully implemented yet"
-                                notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg)
                                 notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg, None, None)
 
                             elif adjustment_cmd.startswith("DATES"):
                                 # Similar logic for DATES command
                                 result_msg = "DATES command parsing not fully implemented yet"
-                                notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg)
                                 notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, result_msg, None, None)
 
                         except Exception as e:
                             error_msg = f"Error applying adjustment: {e}\n\nPlease restart and try again."
-                            notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, error_msg)
                             notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, error_msg, None, None)
                             print(f"Error: {e}")
 

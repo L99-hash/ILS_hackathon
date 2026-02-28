@@ -46,27 +46,19 @@ class ArkeAPIClient:
             response.raise_for_status()
             data = response.json()
 
-            # Debug: Print the response to see its structure
-            print(f"Login response: {data}")
-
             # Try different possible token field names
             self.access_token = data.get("access_token") or data.get("token") or data.get("accessToken")
 
             if not self.access_token:
-                raise ValueError(f"No access token received from login response. Response: {data}")
+                raise ValueError(f"No access token received from login response")
 
             # Update session headers with bearer token
             self.session.headers.update({
                 "Authorization": f"Bearer {self.access_token}"
             })
 
-            print("Authentication successful!")
-
         except requests.RequestException as e:
             print(f"Error during authentication: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"Response status: {e.response.status_code}")
-                print(f"Response body: {e.response.text}")
             raise
 
     def get_sales_orders(self, status: str = "accepted") -> List[Dict[str, Any]]:

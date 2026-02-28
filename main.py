@@ -2,9 +2,12 @@
 """
 NovaBoard Electronics Production Scheduling Agent
 Step 1: Read Sales Orders from Arke API
+Step 2: Choose Planning Policy
 """
 
 from src.api.client import ArkeAPIClient
+from src.models.order import SalesOrderLine
+from src.scheduler.planner import ProductionPlanner
 import json
 
 
@@ -74,15 +77,16 @@ def main():
 
             # Extract product and quantity from order details
             if 'details' in order and order['details']:
-                line_items = order['details'].get('line_items', [])
-                if line_items:
+                products = order['details'].get('products', [])
+                if products:
                     print(f"   Products:")
-                    for item in line_items:
-                        product_name = item.get('product_attr', {}).get('name', 'Unknown Product')
+                    for item in products:
+                        product_name = item.get('name', 'Unknown Product')
+                        product_id = item.get('extra_id', 'N/A')
                         quantity = item.get('quantity', 'N/A')
-                        print(f"     - {product_name}: {quantity} units")
+                        print(f"     - {product_name} (ID: {product_id}): {quantity} units")
                 else:
-                    print(f"   Products: No line items found")
+                    print(f"   Products: No products found")
             else:
                 print(f"   Products: Details not available")
 
@@ -151,16 +155,93 @@ def main():
         print("Use EDF (Earliest Deadline First) scheduling to minimize late deliveries.")
         print("This ensures orders are completed by their deadline, regardless of priority.")
 
+        # STEP 2: Choose Planning Policy
+        print()
+        print("=" * 80)
+        print("STEP 2: CHOOSE PLANNING POLICY")
+        print("=" * 80)
+        print()
+        print("Available planning policies:")
+        print("1. Level 1 (REQUIRED) - EDF: One production order per sales order line")
+        print("2. Level 2 (OPTIONAL) - Group by Product: Merge orders for same product")
+        print("3. Level 2 (OPTIONAL) - Split in Batches: Cap batch size (e.g., 10 units)")
+        print()
+
+        # Get user choice
+        while True:
+            choice = input("Select planning policy (1, 2, or 3): ").strip()
+            if choice in ['1', '2', '3']:
+                break
+            print("Invalid choice. Please enter 1, 2, or 3.")
+
+        # Extract sales order lines from the detailed orders
+        sales_order_lines = []
+        for order in orders_with_details:
+            if 'details' in order and order['details']:
+                products = order['details'].get('products', [])
+                for item in products:
+                    try:
+                        line = SalesOrderLine.from_api_response(order, item)
+                        sales_order_lines.append(line)
+                    except Exception as e:
+                        print(f"Warning: Could not parse product line: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+        print(f"\nTotal sales order lines to plan: {len(sales_order_lines)}")
+
+        # Debug: Show first few lines
+        if sales_order_lines:
+            print("\nDEBUG - First 3 sales order lines:")
+            for i, line in enumerate(sales_order_lines[:3], 1):
+                print(f"  {i}. Product ID: '{line.product_id}', Name: '{line.product_name}', Qty: {line.quantity}")
+        print()
+
+        # Apply selected planning policy
+        planner = ProductionPlanner()
+
+        if choice == '1':
+            print("Applying LEVEL 1: EDF (Earliest Deadline First)")
+            print("One production order per sales order line, sorted by deadline")
+            print()
+            production_orders = planner.level1_edf(sales_order_lines)
+            planner.display_production_plan(production_orders, "Level 1: EDF")
+
+        elif choice == '2':
+            print("Applying LEVEL 2: Group by Product")
+            print("Merging orders with the same product to reduce changeovers")
+            print()
+            production_orders = planner.level2_group_by_product(sales_order_lines)
+            planner.display_production_plan(production_orders, "Level 2: Group by Product")
+
+        elif choice == '3':
+            batch_size = input("Enter maximum batch size (default 10): ").strip()
+            batch_size = int(batch_size) if batch_size.isdigit() else 10
+            print(f"\nApplying LEVEL 2: Split in Batches (max {batch_size} units)")
+            print("Splitting large orders into smaller batches")
+            print()
+            production_orders = planner.level2_split_batches(sales_order_lines, batch_size)
+            planner.display_production_plan(production_orders, f"Level 2: Split in Batches (max {batch_size})")
+
+        # Store production orders for next steps
+        print()
+        print("=" * 80)
+        print("STEP 2 COMPLETE")
+        print("=" * 80)
+        print(f"Generated {len(production_orders)} production orders using the selected policy.")
+        print()
+
     except Exception as e:
-        print(f"Error fetching sales orders: {e}")
+        print(f"Error in planning process: {e}")
+        import traceback
+        traceback.print_exc()
         return
 
     print()
     print("=" * 60)
     print("Next steps:")
-    print("1. Choose planning policy (Level 1 or Level 2 batching)")
-    print("2. Create production orders")
-    print("3. Schedule phases")
+    print("3. Create production orders in Arke")
+    print("4. Schedule phases")
     print("=" * 60)
 
 

@@ -1,4 +1,4 @@
-# NovaBoard Electronics Hackathon 2026 - Team 1
+# NovaBoard Electronics Hackathon 2026 - Team ILS
 
 AI Production Scheduling Agent for PCB Manufacturing
 
@@ -168,7 +168,7 @@ ILS_hackathon/
 
 ## Team
 
-Team 1 - NovaBoard Electronics Hackathon 2026
+Team ILS - NovaBoard Electronics Hackathon 2026
 
 ## License
 

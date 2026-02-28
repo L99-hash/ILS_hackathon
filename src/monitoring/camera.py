@@ -203,7 +203,7 @@ class SimpleLineMonitor:
             cam_folder = f"monitoring_frames/cam{cam_idx}"
             os.makedirs(cam_folder, exist_ok=True)
 
-            filename = f"{cam_folder}/{order_id}_{phase_name}_{timestamp}_{reason}.jpg"
+            filename = f"{cam_folder}/{timestamp}_{order_id}_{reason}.jpg"
             cv2.imwrite(filename, frame)
             saved_files.append(filename)
 

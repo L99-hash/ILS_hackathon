@@ -200,6 +200,30 @@ class ArkeAPIClient:
             print(f"Error scheduling production order {production_id}: {e}")
             raise
 
+    def get_production_order(self, production_id: str) -> Dict[str, Any]:
+        """
+        Get a production order with updated phase information
+        Endpoint: GET /product/production/{id}
+
+        Args:
+            production_id: ID of the production order
+
+        Returns:
+            Production order details with phases
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/product/production/{production_id}"
+
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error fetching production order {production_id}: {e}")
+            raise
+
     def update_phase_start_date(self, phase_id: str, start_date: str) -> Dict[str, Any]:
         """
         Update starting date of a production order phase (OPTIONAL - Step 4)
@@ -215,10 +239,10 @@ class ArkeAPIClient:
         Raises:
             requests.RequestException: If the API request fails
         """
-        url = f"{self.base_url}/production-order-phase/{phase_id}/_update_starting_date"
+        url = f"{self.base_url}/product/production-order-phase/{phase_id}/_update_starting_date"
 
         try:
-            response = self.session.post(url, json={"starting_date": start_date})
+            response = self.session.post(url, json={"starts_at": start_date})
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
@@ -240,14 +264,64 @@ class ArkeAPIClient:
         Raises:
             requests.RequestException: If the API request fails
         """
-        url = f"{self.base_url}/production-order-phase/{phase_id}/_update_ending_date"
+        url = f"{self.base_url}/product/production-order-phase/{phase_id}/_update_ending_date"
 
         try:
-            response = self.session.post(url, json={"ending_date": end_date})
+            response = self.session.post(url, json={"ends_at": end_date})
             response.raise_for_status()
             return response.json()
         except requests.RequestException as e:
             print(f"Error updating phase end date: {e}")
+            raise
+
+    def update_production_start_date(self, production_id: str, starts_at: str) -> Dict[str, Any]:
+        """
+        Update production order starting date
+        Endpoint: POST /product/production/{id}/_update_starting_date
+
+        Args:
+            production_id: ID of the production order
+            starts_at: New start date in ISO format
+
+        Returns:
+            Updated production order
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/product/production/{production_id}/_update_starting_date"
+
+        try:
+            response = self.session.post(url, json={"starts_at": starts_at})
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error updating production start date: {e}")
+            raise
+
+    def update_production_end_date(self, production_id: str, ends_at: str) -> Dict[str, Any]:
+        """
+        Update production order ending date
+        Endpoint: POST /product/production/{id}/_update_ending_date
+
+        Args:
+            production_id: ID of the production order
+            ends_at: New end date in ISO format
+
+        Returns:
+            Updated production order
+
+        Raises:
+            requests.RequestException: If the API request fails
+        """
+        url = f"{self.base_url}/product/production/{production_id}/_update_ending_date"
+
+        try:
+            response = self.session.post(url, json={"ends_at": ends_at})
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            print(f"Error updating production end date: {e}")
             raise
 
     def confirm_production_order(self, production_id: str) -> Dict[str, Any]:

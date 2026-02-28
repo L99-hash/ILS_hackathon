@@ -261,10 +261,13 @@ def main():
 
         print()
         print("Creating production orders...")
-        from datetime import datetime, timezone
+        from datetime import datetime, timezone, timedelta
 
         created_orders = []
         failed_orders = []
+
+        # Track the cumulative end time for sequential scheduling
+        current_start_time = datetime.now(timezone.utc)
 
         for i, prod_order in enumerate(production_orders, 1):
             try:
@@ -281,12 +284,17 @@ def main():
                     failed_orders.append(prod_order)
                     continue
 
-                # Prepare API payload
+                # Prepare API payload with sequential start times
+                # Calculate estimated production end time (API will provide actual duration)
+                # Estimate: ~9 minutes per unit minimum 1 hour
+                estimated_duration_hours = max(1, prod_order.quantity * 0.15)
+                estimated_end_time = current_start_time + timedelta(hours=estimated_duration_hours)
+
                 payload = {
                     "product_id": product_id,
                     "quantity": prod_order.quantity,
-                    "starts_at": datetime.now(timezone.utc).isoformat(),
-                    "ends_at": prod_order.ends_at.isoformat()
+                    "starts_at": current_start_time.isoformat(),
+                    "ends_at": estimated_end_time.isoformat()
                 }
 
                 # Create production order
@@ -295,6 +303,18 @@ def main():
 
                 order_id = response.get('id', 'Unknown')
                 print(f"  {i}/{len(production_orders)}: Created - {prod_order.product_name} x{prod_order.quantity} (ID: {order_id})")
+
+                # Update start time for next order (sequential scheduling)
+                # The next order should start when this one ends
+                duration_minutes = response.get('duration')
+                if duration_minutes is None:
+                    raise Exception(f"API did not return duration for order {order_id}. Cannot schedule sequentially.")
+
+                # Calculate actual production end time
+                production_end_time = current_start_time + timedelta(minutes=duration_minutes)
+
+                # Next order starts when this one ends
+                current_start_time = production_end_time
 
             except Exception as e:
                 print(f"  {i}/{len(production_orders)}: FAILED - {prod_order.product_name}: {str(e)[:50]}")
@@ -310,6 +330,7 @@ def main():
         print()
 
         # STEP 4: Schedule Production Phases
+        scheduled_orders = []
         if len(created_orders) > 0:
             print("=" * 80)
             print("STEP 4: SCHEDULE PRODUCTION PHASES")
@@ -317,11 +338,102 @@ def main():
             print()
             print("Generating phase sequences for production orders...")
 
-            scheduled_orders = []
+            # Track sequential timing across all production orders
+            # Constraint: 480 minutes (8 hours) workday from 9 AM to 5 PM
+            WORKDAY_MINUTES = 480
+            WORKDAY_START_HOUR = 9  # 9 AM
+            WORKDAY_END_HOUR = 17    # 5 PM
+
+            # Start scheduling from next available workday slot
+            now = datetime.now(timezone.utc)
+            if now.hour < WORKDAY_START_HOUR:
+                # Before work starts today - start at 9 AM today
+                next_phase_start = now.replace(hour=WORKDAY_START_HOUR, minute=0, second=0, microsecond=0)
+            elif now.hour >= WORKDAY_END_HOUR:
+                # After work ends today - start at 9 AM tomorrow
+                tomorrow = now + timedelta(days=1)
+                next_phase_start = tomorrow.replace(hour=WORKDAY_START_HOUR, minute=0, second=0, microsecond=0)
+            else:
+                # During work hours - start now
+                next_phase_start = now
+
+            current_day_minutes_used = 0
+            if WORKDAY_START_HOUR <= now.hour < WORKDAY_END_HOUR:
+                # Calculate how many minutes already used today
+                current_day_minutes_used = (now.hour - WORKDAY_START_HOUR) * 60 + now.minute
+
+            def schedule_with_workday_constraint(start_time, duration_minutes, day_minutes_used):
+                """
+                Schedule a phase respecting 8-hour workday (9 AM - 5 PM).
+                Work stops at 5 PM and resumes at 9 AM next day.
+                """
+                phase_start = start_time
+                remaining_in_day = WORKDAY_MINUTES - day_minutes_used
+                remaining_duration = duration_minutes
+
+                # If phase doesn't fit in remaining workday time, move to next day 9 AM
+                if remaining_duration > remaining_in_day:
+                    # Move to next day at 9 AM
+                    next_day = start_time + timedelta(days=1)
+                    phase_start = next_day.replace(hour=WORKDAY_START_HOUR, minute=0, second=0, microsecond=0)
+                    day_minutes_used = 0
+                    remaining_in_day = WORKDAY_MINUTES
+
+                # Calculate end time accounting for workday breaks (9 AM - 5 PM)
+                current_time = phase_start
+                current_day_used = day_minutes_used
+
+                while remaining_duration > 0:
+                    available_today = WORKDAY_MINUTES - current_day_used
+
+                    if remaining_duration <= available_today:
+                        # Phase completes today
+                        current_time = current_time + timedelta(minutes=remaining_duration)
+                        current_day_used += remaining_duration
+                        remaining_duration = 0
+                    else:
+                        # Phase continues tomorrow at 9 AM
+                        remaining_duration -= available_today
+                        # Move to next workday at 9 AM
+                        next_day = current_time + timedelta(days=1)
+                        current_time = next_day.replace(hour=WORKDAY_START_HOUR, minute=0, second=0, microsecond=0)
+                        current_day_used = 0
+
+                phase_end = current_time
+                new_day_minutes = current_day_used
+
+                return phase_start, phase_end, new_day_minutes
+
             for i, (prod_order, response) in enumerate(created_orders, 1):
                 order_id = response.get('id')
                 try:
+                    # Generate phase sequence from BOM
                     scheduled_response = client.schedule_production_order(order_id)
+
+                    # Get total duration from production order response (not from summing phases)
+                    total_duration = scheduled_response.get('duration', 0)
+                    phases = scheduled_response.get('phases', [])
+                    print(f"    Duration: {total_duration} minutes ({len(phases)} phases)")
+
+                    # Apply workday constraint to get production start/end times
+                    production_start, production_end, current_day_minutes_used = schedule_with_workday_constraint(
+                        next_phase_start, total_duration, current_day_minutes_used
+                    )
+
+                    # Update production order dates (API will reschedule phases accordingly)
+                    print(f"    → Setting: {production_start.strftime('%Y-%m-%d %H:%M')} to {production_end.strftime('%Y-%m-%d %H:%M')}")
+                    client.update_production_start_date(order_id, production_start.isoformat())
+                    client.update_production_end_date(order_id, production_end.isoformat())
+
+                    # Fetch updated production order
+                    scheduled_response = client.get_production_order(order_id)
+                    actual_start = scheduled_response.get('starts_at', 'N/A')[:16].replace('T', ' ')
+                    actual_end = scheduled_response.get('ends_at', 'N/A')[:16].replace('T', ' ')
+                    print(f"    ✓ Verified: {actual_start} to {actual_end}")
+
+                    # Next order starts when this one ends
+                    next_phase_start = production_end
+
                     scheduled_orders.append((prod_order, scheduled_response))
                     print(f"  {i}/{len(created_orders)}: Scheduled - {prod_order.product_name} (ID: {order_id})")
                 except Exception as e:
@@ -332,6 +444,46 @@ def main():
             print("STEP 4 COMPLETE")
             print("=" * 80)
             print(f"Successfully scheduled: {len(scheduled_orders)}/{len(created_orders)} production orders")
+            print()
+
+            # Validate deadlines are met
+            print("=" * 80)
+            print("DEADLINE VALIDATION")
+            print("=" * 80)
+            print()
+
+            late_orders = []
+            on_time_orders = []
+
+            for prod_order, scheduled_response in scheduled_orders:
+                production_end = scheduled_response.get('ends_at')
+                customer_deadline = prod_order.ends_at.isoformat()
+
+                if production_end and production_end > customer_deadline:
+                    late_orders.append((prod_order, scheduled_response, production_end, customer_deadline))
+                else:
+                    on_time_orders.append((prod_order, scheduled_response))
+
+            print(f"✓ On-time orders: {len(on_time_orders)}/{len(scheduled_orders)}")
+
+            if late_orders:
+                print(f"⚠ LATE orders: {len(late_orders)}/{len(scheduled_orders)}")
+                print()
+                print("Orders that will miss their deadline:")
+                for prod_order, scheduled_response, prod_end, deadline in late_orders:
+                    from datetime import datetime
+                    prod_end_dt = datetime.fromisoformat(prod_end.replace('Z', '+00:00'))
+                    deadline_dt = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+                    delay_hours = (prod_end_dt - deadline_dt).total_seconds() / 3600
+
+                    print(f"  - {prod_order.product_name} (Order: {', '.join(prod_order.source_sales_orders)})")
+                    print(f"    Production ends: {prod_end[:16].replace('T', ' ')}")
+                    print(f"    Customer deadline: {deadline[:16].replace('T', ' ')}")
+                    print(f"    Delay: {delay_hours:.1f} hours")
+                    print()
+            else:
+                print("✓ All orders will be completed before their deadlines!")
+
             print()
 
         # STEP 5: Human in the Loop - Present Schedule for Approval

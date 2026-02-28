@@ -37,16 +37,21 @@ class ScheduleNotifier:
             count = task_counts[product_name]
             task_label = f"{product_name} #{count}" if count > 1 else product_name
 
+            # Include order ID and quantity in the task label so it's always visible
+            order_id = scheduled_response.get("id", "Unknown")
+            quantity = prod_order.quantity
+            task_label_with_id = f"{task_label} (x{quantity}) [{order_id}]"
+
             rows.append(
                 dict(
-                    Task=task_label,
+                    Task=task_label_with_id,
                     Start=starts_at,
                     Finish=ends_at,
                     Priority=f"P{prod_order.priority}",
                     Deadline=prod_order.ends_at.strftime("%Y-%m-%d %H:%M"),
                     SalesOrder=", ".join(prod_order.source_sales_orders),
                     Quantity=prod_order.quantity,
-                    OrderID=scheduled_response.get("id", "Unknown"),
+                    OrderID=order_id,
                 )
             )
 
@@ -54,9 +59,12 @@ class ScheduleNotifier:
         # e.g. if "PCB-IND-100" appears twice, rename the first entry from "PCB-IND-100" to "PCB-IND-100 #1"
         final_task_counts = task_counts  # already has final counts after the loop
         for row in rows:
-            base_name = row["Task"].split(" #")[0]
-            if final_task_counts.get(base_name, 1) > 1 and " #" not in row["Task"]:
-                row["Task"] = f"{base_name} #1"
+            # Extract base name (before # and before [OrderID])
+            task_part = row["Task"].split(" [")[0]  # Remove [OrderID] part
+            base_name = task_part.split(" #")[0]
+            if final_task_counts.get(base_name, 1) > 1 and " #" not in task_part:
+                order_id_part = row["Task"].split(" [")[1] if " [" in row["Task"] else ""
+                row["Task"] = f"{base_name} #1 [{order_id_part}" if order_id_part else f"{base_name} #1"
 
         if not rows:
             return None
@@ -69,17 +77,12 @@ class ScheduleNotifier:
             x_end="Finish",
             y="Task",
             color="Priority",
-            hover_data=["SalesOrder", "Quantity", "Deadline"],
+            hover_data=["SalesOrder", "Quantity", "Deadline", "OrderID"],
             title="Production Schedule — EDF (Earliest Deadline First)",
             labels={"Task": "Product", "Priority": "Priority"},
-            text="OrderID",
         )
 
-        fig.update_traces(
-            textposition="inside",
-            insidetextanchor="middle",
-            textfont=dict(size=11, color="white"),
-        )
+        # No text inside bars - Order ID is now in the task label on the left
 
         fig.update_yaxes(autorange="reversed")
         fig.update_layout(
@@ -89,24 +92,33 @@ class ScheduleNotifier:
             height=max(300, 80 * len(rows)),
         )
 
-        # Deduplicate deadline lines — one vline per unique deadline date
+        # Add deadline markers as vertical lines positioned at each task's row
         from datetime import timezone
-        deadline_to_tasks = {}
-        for row in rows:
-            base_name = row["Task"].split(" #")[0]  # group by base product name
-            deadline_to_tasks.setdefault(row["Deadline"], set()).add(base_name)
 
-        for deadline_str, tasks in deadline_to_tasks.items():
+        # Get task labels in order (for Y-axis positioning)
+        task_labels = df["Task"].tolist()
+
+        for idx, row in enumerate(rows):
+            deadline_str = row["Deadline"]
             deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
             deadline_ms = deadline_dt.timestamp() * 1000
-            fig.add_vline(
-                x=deadline_ms,
-                line_dash="dot",
-                line_color="red",
-                opacity=0.6,
-                annotation_text=", ".join(sorted(tasks)),
-                annotation_position="bottom right",
-                annotation_font_size=9,
+            task_name = row["Task"]
+
+            # Add a vertical line shape at this specific task's row
+            # Y coordinates: idx (top of bar) to idx+0.9 (bottom of bar)
+            fig.add_shape(
+                type="line",
+                x0=deadline_ms,
+                x1=deadline_ms,
+                y0=idx - 0.4,  # Slightly above the bar
+                y1=idx + 0.4,  # Slightly below the bar
+                line=dict(
+                    color="red",
+                    width=2,
+                    dash="dot",
+                ),
+                yref="y",
+                xref="x",
             )
 
         return fig

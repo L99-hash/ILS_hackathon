@@ -5,6 +5,7 @@ Simple camera-based production line monitor with Telegram control
 import cv2
 import time
 import os
+import json
 import requests
 import threading
 from datetime import datetime
@@ -13,9 +14,23 @@ from datetime import datetime
 class SimpleLineMonitor:
     """Simple camera-based production line monitor with remote control"""
 
-    def __init__(self, camera_index=0, telegram_bot_token=None, telegram_chat_id=None):
-        self.camera_index = camera_index
-        self.camera = None
+    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None):
+        """
+        Initialize monitor with single or multiple cameras
+
+        Args:
+            camera_indices: Single index (int) or list of indices [0, 1]
+            telegram_bot_token: Telegram bot token
+            telegram_chat_id: Telegram chat ID
+        """
+        # Support both single camera and multiple cameras
+        if isinstance(camera_indices, int):
+            self.camera_indices = [camera_indices]
+        else:
+            self.camera_indices = camera_indices
+
+        # Dictionary of cameras {index: VideoCapture object}
+        self.cameras = {}
         self.monitoring = False
 
         # Telegram integration
@@ -29,24 +44,35 @@ class SimpleLineMonitor:
         self.trigger_lock = threading.Lock()
 
     def start_camera(self):
-        """Initialize camera"""
-        print(f"Starting camera {self.camera_index}...")
-        self.camera = cv2.VideoCapture(self.camera_index)
+        """Initialize all cameras"""
+        for idx in self.camera_indices:
+            print(f"Starting camera {idx}...")
+            cap = cv2.VideoCapture(idx)
 
-        if not self.camera.isOpened():
-            raise Exception(f"Failed to open camera {self.camera_index}")
+            if not cap.isOpened():
+                print(f"Warning: Failed to open camera {idx}")
+                continue
 
-        # Get camera properties
-        width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        print(f"Camera started: {width}x{height}")
+            # Get camera properties
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            print(f"  Camera {idx} started: {width}x{height}")
+
+            self.cameras[idx] = cap
+
+        if not self.cameras:
+            raise Exception(f"Failed to open any cameras from {self.camera_indices}")
+
+        print(f"Total cameras active: {len(self.cameras)}")
 
     def stop_camera(self):
-        """Release camera"""
-        if self.camera:
-            self.camera.release()
-            cv2.destroyAllWindows()
-            print("Camera stopped")
+        """Release all cameras"""
+        for idx, cap in self.cameras.items():
+            cap.release()
+            print(f"Camera {idx} stopped")
+
+        cv2.destroyAllWindows()
+        self.cameras.clear()
 
     def start_telegram_listener(self):
         """Start background thread listening for Telegram commands"""
@@ -111,49 +137,129 @@ class SimpleLineMonitor:
                 time.sleep(1)
 
     def capture_frame(self):
-        """Capture single frame"""
-        if not self.camera or not self.camera.isOpened():
-            return None
+        """
+        Capture frames from all cameras
 
-        ret, frame = self.camera.read()
-        if ret:
-            return frame
-        return None
+        Returns:
+            Dictionary {camera_index: frame} or None if all failed
+        """
+        frames = {}
 
-    def save_frame(self, frame, phase_name, order_id, reason="auto"):
-        """Save frame to disk"""
-        if frame is None:
-            return None
+        for idx, cap in self.cameras.items():
+            if cap and cap.isOpened():
+                ret, frame = cap.read()
+                if ret:
+                    frames[idx] = frame
+
+        return frames if frames else None
+
+    def save_frames(self, frames_dict, phase_name, order_id, reason="auto"):
+        """
+        Save frames from all cameras to disk
+
+        Args:
+            frames_dict: Dictionary {camera_index: frame}
+            phase_name: Name of current phase
+            order_id: Production order ID
+            reason: Why frame was captured
+
+        Returns:
+            List of saved filenames
+        """
+        if not frames_dict:
+            return []
 
         # Create monitoring directory
         os.makedirs("monitoring_frames", exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"monitoring_frames/{order_id}_{phase_name}_{timestamp}_{reason}.jpg"
+        saved_files = []
 
-        cv2.imwrite(filename, frame)
-        return filename
+        for cam_idx, frame in frames_dict.items():
+            filename = f"monitoring_frames/{order_id}_{phase_name}_cam{cam_idx}_{timestamp}_{reason}.jpg"
+            cv2.imwrite(filename, frame)
+            saved_files.append(filename)
 
-    def send_image_to_telegram(self, image_path, caption=""):
-        """Send an image to Telegram"""
+        return saved_files
+
+    def send_images_to_telegram(self, image_paths, caption=""):
+        """
+        Send one or more images to Telegram
+
+        If multiple images, sends as a media group (album)
+        If single image, sends as regular photo
+
+        Args:
+            image_paths: List of image file paths or single path
+            caption: Caption for the images
+
+        Returns:
+            True if successful
+        """
         if not self.telegram_bot_token or not self.telegram_chat_id:
             print("Telegram not configured, skipping image send")
             return False
 
-        url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendPhoto"
+        # Convert single path to list
+        if isinstance(image_paths, str):
+            image_paths = [image_paths]
+
+        if not image_paths:
+            return False
 
         try:
-            with open(image_path, 'rb') as photo:
-                files = {'photo': photo}
+            if len(image_paths) == 1:
+                # Single image - use sendPhoto
+                url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendPhoto"
+                with open(image_paths[0], 'rb') as photo:
+                    files = {'photo': photo}
+                    data = {
+                        'chat_id': self.telegram_chat_id,
+                        'caption': caption
+                    }
+                    response = requests.post(url, files=files, data=data, timeout=10)
+                    response.raise_for_status()
+                    return True
+
+            else:
+                # Multiple images - use sendMediaGroup
+                url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendMediaGroup"
+
+                # Build media array
+                media = []
+                files_dict = {}
+
+                for i, path in enumerate(image_paths):
+                    attach_name = f"photo{i}"
+                    files_dict[attach_name] = open(path, 'rb')
+
+                    media_item = {
+                        'type': 'photo',
+                        'media': f'attach://{attach_name}'
+                    }
+
+                    # Add caption to first image
+                    if i == 0 and caption:
+                        media_item['caption'] = caption
+
+                    media.append(media_item)
+
                 data = {
                     'chat_id': self.telegram_chat_id,
-                    'caption': caption
+                    'media': json.dumps(media)
                 }
-                response = requests.post(url, files=files, data=data, timeout=10)
-                response.raise_for_status()
-                return True
+
+                try:
+                    response = requests.post(url, data=data, files=files_dict, timeout=15)
+                    response.raise_for_status()
+                    return True
+                finally:
+                    # Close all file handles
+                    for f in files_dict.values():
+                        f.close()
+
         except Exception as e:
-            print(f"Failed to send image to Telegram: {e}")
+            print(f"Failed to send images to Telegram: {e}")
             return False
 
     def trigger_capture(self, reason="manual"):
@@ -171,9 +277,14 @@ class SimpleLineMonitor:
             self.capture_triggers.append(reason)
         return reason
 
-    def check_and_process_triggers(self, frame, phase_name, order_id):
+    def check_and_process_triggers(self, frames_dict, phase_name, order_id):
         """
         Check if there are any pending capture triggers and process them
+
+        Args:
+            frames_dict: Dictionary {camera_index: frame}
+            phase_name: Current phase name
+            order_id: Production order ID
 
         Returns:
             Number of triggers processed
@@ -187,17 +298,21 @@ class SimpleLineMonitor:
 
         processed = 0
         for reason in triggers_to_process:
-            # Save frame
-            filename = self.save_frame(frame, phase_name, order_id, reason=reason)
+            # Save frames from all cameras
+            saved_files = self.save_frames(frames_dict, phase_name, order_id, reason=reason)
 
-            if filename:
-                print(f"📸 Capture triggered by {reason}: {filename}")
+            if saved_files:
+                print(f"📸 Capture triggered by {reason}:")
+                for filepath in saved_files:
+                    print(f"   {filepath}")
 
                 # Send to Telegram if configured
                 if self.telegram_bot_token and self.telegram_chat_id:
-                    caption = f"Phase: {phase_name}\nReason: {reason}\nTime: {datetime.now().strftime('%H:%M:%S')}"
-                    if self.send_image_to_telegram(filename, caption):
-                        print(f"   ✓ Image sent to Telegram")
+                    num_cams = len(saved_files)
+                    caption = f"Phase: {phase_name}\nCameras: {num_cams}\nReason: {reason}\nTime: {datetime.now().strftime('%H:%M:%S')}"
+
+                    if self.send_images_to_telegram(saved_files, caption):
+                        print(f"   ✓ {num_cams} image(s) sent to Telegram")
                     else:
                         print(f"   ✗ Failed to send to Telegram")
 
@@ -205,29 +320,67 @@ class SimpleLineMonitor:
 
         return processed
 
-    def show_frame(self, frame, phase_name, status="Running"):
-        """Display frame with overlay"""
-        if frame is None:
+    def show_frames(self, frames_dict, phase_name, status="Running"):
+        """
+        Display frames from all cameras with overlays
+
+        Args:
+            frames_dict: Dictionary {camera_index: frame}
+            phase_name: Current phase name
+            status: Status text to display
+        """
+        if not frames_dict:
             return
 
-        # Add text overlay
-        display_frame = frame.copy()
+        # Add text overlay to each frame
+        display_frames = []
 
-        # Status text
-        text = f"Phase: {phase_name} | Status: {status}"
-        cv2.putText(display_frame, text, (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        for cam_idx in sorted(frames_dict.keys()):
+            frame = frames_dict[cam_idx]
+            display_frame = frame.copy()
 
-        # Timestamp
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        cv2.putText(display_frame, f"Time: {timestamp}", (10, 60),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            # Status text
+            text = f"Camera {cam_idx} | Phase: {phase_name} | {status}"
+            cv2.putText(display_frame, text, (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-        # Instructions
-        cv2.putText(display_frame, "Press 'q' to stop monitoring", (10, 90),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            # Timestamp
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            cv2.putText(display_frame, f"Time: {timestamp}", (10, 60),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-        cv2.imshow('Production Line Monitor', display_frame)
+            # Instructions (only on first camera)
+            if cam_idx == sorted(frames_dict.keys())[0]:
+                cv2.putText(display_frame, "Press 'q' to stop monitoring", (10, 90),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+
+            display_frames.append(display_frame)
+
+        if len(display_frames) == 1:
+            # Single camera - show as is
+            cv2.imshow('Production Line Monitor', display_frames[0])
+        else:
+            # Multiple cameras - show side by side
+            # Resize all frames to the same height before concatenating
+            if display_frames:
+                # Find the minimum height among all frames
+                min_height = min(frame.shape[0] for frame in display_frames)
+
+                # Resize all frames to have the same height
+                resized_frames = []
+                for frame in display_frames:
+                    if frame.shape[0] != min_height:
+                        # Calculate new width to maintain aspect ratio
+                        aspect_ratio = frame.shape[1] / frame.shape[0]
+                        new_width = int(min_height * aspect_ratio)
+                        resized = cv2.resize(frame, (new_width, min_height))
+                        resized_frames.append(resized)
+                    else:
+                        resized_frames.append(frame)
+
+                # Stack frames horizontally
+                combined = cv2.hconcat(resized_frames)
+                cv2.imshow('Production Line Monitor - All Cameras', combined)
 
     def monitor_phase(self, phase_name, order_id, duration_seconds=30, save_interval=10):
         """
@@ -245,7 +398,7 @@ class SimpleLineMonitor:
         print(f"Duration: {duration_seconds}s")
         print(f"{'='*60}\n")
 
-        if not self.camera or not self.camera.isOpened():
+        if not self.cameras:
             self.start_camera()
 
         # Start Telegram listener if configured
@@ -258,29 +411,29 @@ class SimpleLineMonitor:
 
         try:
             while True:
-                # Capture frame
-                frame = self.capture_frame()
-                if frame is None:
-                    print("Failed to capture frame")
+                # Capture frames from all cameras
+                frames_dict = self.capture_frame()
+                if frames_dict is None:
+                    print("Failed to capture frames")
                     break
 
                 frame_count += 1
                 elapsed = time.time() - start_time
 
                 # Show live view
-                self.show_frame(frame, phase_name, f"Running ({elapsed:.0f}s)")
+                self.show_frames(frames_dict, phase_name, f"Running ({elapsed:.0f}s)")
 
                 # Check for external capture triggers (Telegram, API, etc.)
-                triggers_processed = self.check_and_process_triggers(frame, phase_name, order_id)
+                triggers_processed = self.check_and_process_triggers(frames_dict, phase_name, order_id)
                 if triggers_processed > 0:
                     saved_count += triggers_processed
 
-                # Save frame at intervals
+                # Save frames at intervals
                 if elapsed - last_save >= save_interval:
-                    saved_file = self.save_frame(frame, phase_name, order_id, reason="auto")
-                    if saved_file:
-                        print(f"[{elapsed:.0f}s] Saved: {saved_file}")
-                        saved_count += 1
+                    saved_files = self.save_frames(frames_dict, phase_name, order_id, reason="auto")
+                    if saved_files:
+                        print(f"[{elapsed:.0f}s] Saved {len(saved_files)} frame(s)")
+                        saved_count += len(saved_files)
                     last_save = elapsed
 
                 # Check for quit or duration exceeded

@@ -428,23 +428,43 @@ def main():
                     if enable_monitoring in ['yes', 'y']:
                         from src.monitoring.camera import SimpleLineMonitor
 
-                        # Ask which camera to use
-                        camera_index = input("Which camera to use? (0, 1, or 2): ").strip()
-                        try:
-                            camera_index = int(camera_index)
-                        except ValueError:
-                            camera_index = 0
-                            print(f"Invalid input, using camera 0")
+                        # Ask which cameras to use
+                        camera_input = input("Which camera(s) to use? (0, 1, 2 or '0,1' for multiple): ").strip()
+                        # Strip quotes if user included them
+                        camera_input = camera_input.strip("'\"")
 
-                        print(f"\nStarting camera monitoring (Camera {camera_index})...")
+                        # Parse camera indices
+                        camera_indices = []
+                        if ',' in camera_input:
+                            # Multiple cameras
+                            for idx_str in camera_input.split(','):
+                                try:
+                                    camera_indices.append(int(idx_str.strip()))
+                                except ValueError:
+                                    pass
+                        else:
+                            # Single camera
+                            try:
+                                camera_indices = [int(camera_input)]
+                            except ValueError:
+                                camera_indices = [0]
+                                print(f"Invalid input, using camera 0")
+
+                        if not camera_indices:
+                            camera_indices = [0]
+                            print(f"No valid cameras, using camera 0")
+
+                        print(f"\nStarting camera monitoring (Camera(s): {camera_indices})...")
                         print("A window will open showing live production line feed")
+                        if len(camera_indices) > 1:
+                            print(f"Multiple cameras will be shown side-by-side")
                         print("Press 'q' in the camera window to stop monitoring a phase")
                         if telegram_bot_token and telegram_chat_id:
-                            print("Send 'CAPTURE' via Telegram to take a photo anytime!")
+                            print("Send 'CAPTURE' via Telegram to take photos from all cameras!")
                         print()
 
                         monitor = SimpleLineMonitor(
-                            camera_index=camera_index,
+                            camera_indices=camera_indices,
                             telegram_bot_token=telegram_bot_token,
                             telegram_chat_id=telegram_chat_id
                         )
@@ -541,7 +561,6 @@ Please send your adjustment command:"""
 
                     # Wait for adjustment command
                     import requests
-                    import time
                     url = f"https://api.telegram.org/bot{telegram_bot_token}/getUpdates"
                     last_update_id = None
                     timeout = 300

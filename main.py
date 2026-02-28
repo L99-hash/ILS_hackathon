@@ -411,9 +411,15 @@ def main():
                     scheduled_response = client.schedule_production_order(order_id)
 
                     # Get total duration from production order response (not from summing phases)
-                    total_duration = scheduled_response.get('duration', 0)
+                    base_duration = scheduled_response.get('duration', 0)
+                    quantity = prod_order.quantity
+
+                    # WORKAROUND: API returns duration per batch (not scaled by quantity)
+                    # Multiply by quantity to get realistic total production time
+                    total_duration = base_duration * quantity
+
                     phases = scheduled_response.get('phases', [])
-                    print(f"    Duration: {total_duration} minutes ({len(phases)} phases)")
+                    print(f"    Base duration: {base_duration} min × {quantity} units = {total_duration} minutes ({len(phases)} phases)")
 
                     # Apply workday constraint to get production start/end times
                     production_start, production_end, current_day_minutes_used = schedule_with_workday_constraint(

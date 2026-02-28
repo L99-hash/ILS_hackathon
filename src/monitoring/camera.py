@@ -14,7 +14,7 @@ from datetime import datetime
 class SimpleLineMonitor:
     """Simple camera-based production line monitor with remote control"""
 
-    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None):
+    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None):
         """
         Initialize monitor with single or multiple cameras
 
@@ -22,6 +22,8 @@ class SimpleLineMonitor:
             camera_indices: Single index (int) or list of indices [0, 1]
             telegram_bot_token: Telegram bot token
             telegram_chat_id: Telegram chat ID
+            scheduled_orders: Production schedule for GANTT chart
+            notifier: ScheduleNotifier instance for sending GANTT
         """
         # Support both single camera and multiple cameras
         if isinstance(camera_indices, int):
@@ -38,6 +40,10 @@ class SimpleLineMonitor:
         self.telegram_chat_id = telegram_chat_id
         self.telegram_thread = None
         self.telegram_running = False
+
+        # GANTT chart support
+        self.scheduled_orders = scheduled_orders
+        self.notifier = notifier
 
         # Trigger system for external capture requests
         self.capture_triggers = []
@@ -137,6 +143,16 @@ class SimpleLineMonitor:
                             if text == "CAPTURE" or text == "PHOTO" or text == "SNAP":
                                 print("\n📱 Telegram: Capture request received")
                                 self.trigger_capture(reason="telegram")
+                            elif text == "GANTT":
+                                print("\n📊 Telegram: GANTT chart request received")
+                                try:
+                                    if self.notifier and self.scheduled_orders:
+                                        self.notifier.send_gantt_to_telegram(self.telegram_bot_token, self.telegram_chat_id, self.scheduled_orders)
+                                        print("   ✓ Gantt chart sent to Telegram")
+                                    else:
+                                        print("   ✗ GANTT not available (missing notifier or scheduled_orders)")
+                                except Exception as e:
+                                    print(f"   ✗ Failed to send Gantt: {e}")
 
             except Exception as e:
                 # Silently continue on errors

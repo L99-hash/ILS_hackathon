@@ -1031,8 +1031,12 @@ Example: *0,1* to use both camera 0 and 1"""
                             print(f"Multiple cameras will be shown side-by-side")
                         print("Press 'q' in the camera window to stop monitoring a phase")
                         if telegram_bot_token and telegram_chat_id:
-                            print("Send 'CAPTURE' via Telegram to take photos from all cameras!")
+                            print("Send 'CAPTURE' and 'GANTT' via Telegram!")
                         print()
+
+                        # Note: Camera monitoring will handle CAPTURE commands via its own listener
+                        # This GANTT listener will be disabled - camera module handles both GANTT and CAPTURE
+                        print("📱 Telegram commands (GANTT, CAPTURE) will be handled by camera monitor")
 
                         # Send camera monitoring start notification to Telegram
                         if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
@@ -1040,7 +1044,9 @@ Example: *0,1* to use both camera 0 and 1"""
 
 Monitoring camera(s): {', '.join(map(str, camera_indices))}
 
-📸 *To capture photos:* Send *CAPTURE* at any time to receive photos from all cameras on Telegram!
+📸 *Available Commands:*
+• *CAPTURE* - Take photos from all cameras
+• *GANTT* - View the production schedule
 
 The camera window is now open on your computer."""
 
@@ -1049,7 +1055,9 @@ The camera window is now open on your computer."""
                         monitor = SimpleLineMonitor(
                             camera_indices=camera_indices,
                             telegram_bot_token=telegram_bot_token,
-                            telegram_chat_id=telegram_chat_id
+                            telegram_chat_id=telegram_chat_id,
+                            scheduled_orders=scheduled_orders,
+                            notifier=notifier
                         )
 
                         try:

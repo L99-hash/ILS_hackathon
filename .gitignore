@@ -90,6 +90,10 @@ secrets.json
 *.sqlite
 *.sqlite3
 
+# Saved images
+
+*.jpg
+
 # Build outputs
 dist/
 build/

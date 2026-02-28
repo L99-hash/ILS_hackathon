@@ -56,11 +56,17 @@ Generate production orders in Arke with:
 - Explain EDF reasoning for SO-005 prioritization
 - Get approval before execution
 
-### 6. Physical Integration
-Advance production with real-world signals:
-- Camera verification for line status
-- Robot actuation for material handling
-- Monitor running/idle/fault states
+### 6. Physical Integration (Camera Monitoring)
+**Integrated into main workflow after Step 5**
+
+Monitor production phases with live camera feed:
+- Opens camera window showing production line
+- Displays phase name, status, and timestamp overlay
+- Saves frames every 10 seconds to `monitoring_frames/`
+- Monitor all phases of all production orders sequentially
+- Press 'q' to skip to next phase
+
+**Automatically prompts after Step 5 approval**
 
 ### 7. Confirm & Execute
 - Move orders to in_progress status

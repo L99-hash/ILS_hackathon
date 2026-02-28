@@ -17,3 +17,4 @@ dependencies:
     - httpx
     - "plotly[express]"
     - kaleido
+    - opencv-python>=4.8.0

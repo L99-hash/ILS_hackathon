@@ -2,13 +2,191 @@
 
 from typing import List
 from datetime import datetime
+import plotly.express as px
+import plotly.io as pio
+import pandas as pd
 
 
 class ScheduleNotifier:
     """Sends production schedule to planner for approval"""
 
     @staticmethod
-    def format_schedule_message(production_orders: List, scheduled_orders: List) -> str:
+    def build_gantt_chart(scheduled_orders: List):
+        """
+        Build a Plotly Gantt chart from scheduled orders.
+
+        Args:
+            scheduled_orders: List of (ProductionOrder, scheduled_response) tuples
+
+        Returns:
+            A Plotly Figure object, or None if no valid orders
+        """
+        rows = []
+        task_counts = {}  # track how many times each product name appears
+
+        for prod_order, scheduled_response in scheduled_orders:
+            starts_at = scheduled_response.get("starts_at")
+            ends_at = scheduled_response.get("ends_at")
+            if not starts_at or not ends_at:
+                continue
+
+            product_name = prod_order.product_name
+
+            # --- FIX: assign sub-row label if product appears more than once ---
+            task_counts[product_name] = task_counts.get(product_name, 0) + 1
+            count = task_counts[product_name]
+            task_label = f"{product_name} #{count}" if count > 1 else product_name
+
+            rows.append(
+                dict(
+                    Task=task_label,
+                    Start=starts_at,
+                    Finish=ends_at,
+                    Priority=f"P{prod_order.priority}",
+                    Deadline=prod_order.ends_at.strftime("%Y-%m-%d %H:%M"),
+                    SalesOrder=", ".join(prod_order.source_sales_orders),
+                    Quantity=prod_order.quantity,
+                    OrderID=scheduled_response.get("id", "Unknown"),
+                )
+            )
+
+        # --- FIX: retroactively rename the first occurrence to "#1" if there are duplicates ---
+        # e.g. if "PCB-IND-100" appears twice, rename the first entry from "PCB-IND-100" to "PCB-IND-100 #1"
+        final_task_counts = task_counts  # already has final counts after the loop
+        for row in rows:
+            base_name = row["Task"].split(" #")[0]
+            if final_task_counts.get(base_name, 1) > 1 and " #" not in row["Task"]:
+                row["Task"] = f"{base_name} #1"
+
+        if not rows:
+            return None
+
+        df = pd.DataFrame(rows)
+
+        fig = px.timeline(
+            df,
+            x_start="Start",
+            x_end="Finish",
+            y="Task",
+            color="Priority",
+            hover_data=["SalesOrder", "Quantity", "Deadline"],
+            title="Production Schedule — EDF (Earliest Deadline First)",
+            labels={"Task": "Product", "Priority": "Priority"},
+            text="OrderID",
+        )
+
+        fig.update_traces(
+            textposition="inside",
+            insidetextanchor="middle",
+            textfont=dict(size=11, color="white"),
+        )
+
+        fig.update_yaxes(autorange="reversed")
+        fig.update_layout(
+            xaxis_title="Timeline",
+            yaxis_title="Production Order",
+            legend_title="Priority",
+            height=max(300, 80 * len(rows)),
+        )
+
+        # Deduplicate deadline lines — one vline per unique deadline date
+        from datetime import timezone
+        deadline_to_tasks = {}
+        for row in rows:
+            base_name = row["Task"].split(" #")[0]  # group by base product name
+            deadline_to_tasks.setdefault(row["Deadline"], set()).add(base_name)
+
+        for deadline_str, tasks in deadline_to_tasks.items():
+            deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+            deadline_ms = deadline_dt.timestamp() * 1000
+            fig.add_vline(
+                x=deadline_ms,
+                line_dash="dot",
+                line_color="red",
+                opacity=0.6,
+                annotation_text=", ".join(sorted(tasks)),
+                annotation_position="bottom right",
+                annotation_font_size=9,
+            )
+
+        return fig
+    
+
+    @staticmethod
+    def send_gantt_to_telegram(bot_token: str, chat_id: str, scheduled_orders: List) -> bool:
+        """
+        Render the Gantt chart as a PNG and send it to Telegram as a photo.
+
+        Requires: kaleido
+
+        Args:
+            bot_token: Telegram bot token from @BotFather
+            chat_id: Telegram chat ID to send to
+            scheduled_orders: List of (ProductionOrder, scheduled_response) tuples
+
+        Returns:
+            True if photo sent successfully, False otherwise
+        """
+        import requests
+        import tempfile
+        import os
+
+        if not bot_token or "your_bot_token_here" in bot_token:
+            print("Note: No valid Telegram bot token configured.")
+            return False
+
+        if not chat_id or "your_chat_id_here" in chat_id:
+            print("Note: No valid Telegram chat ID configured.")
+            return False
+
+        fig = ScheduleNotifier.build_gantt_chart(scheduled_orders)
+        if fig is None:
+            print("⚠ No schedulable orders found — Gantt chart skipped.")
+            return False
+
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp_path = tmp.name
+
+            pio.write_image(
+                fig,
+                tmp_path,
+                format="png",
+                width=1400,
+                height=max(400, 80 * len(scheduled_orders)),
+            )
+
+            url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+            with open(tmp_path, "rb") as photo:
+                response = requests.post(
+                    url,
+                    data={
+                        "chat_id": chat_id,
+                        "caption": "📊 Production Schedule — Gantt Chart\nRed lines indicate customer deadlines.",
+                    },
+                    files={"photo": photo},
+                )
+            response.raise_for_status()
+            print("📊 Gantt chart sent to Telegram successfully!")
+            return True
+
+        except Exception as e:
+            print(f"Failed to send Gantt chart to Telegram: {e}")
+            if hasattr(e, "response") and e.response is not None:
+                try:
+                    print(f"Telegram API error: {e.response.json()}")
+                except Exception:
+                    pass
+            return False
+
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+
+    @staticmethod
+    def format_schedule_message(production_orders: List, scheduled_orders: List):
         """
         Format production schedule for human approval
 
@@ -18,10 +196,11 @@ class ScheduleNotifier:
 
         Returns:
             Formatted message string
+            scheduled_orders (used to build the gantt chart)
         """
         message = []
         message.append("=" * 60)
-        message.append("PRODUCTION SCHEDULE - APPROVAL REQUIRED")
+        message.append("📋 *Production Schedule* - Awaiting your approval")
         message.append("=" * 60)
         message.append("")
         message.append(f"Total Orders: {len(scheduled_orders)}")
@@ -87,7 +266,7 @@ class ScheduleNotifier:
                 conflicts_found.append(reason)
 
         if conflicts_found:
-            message.append("Key scheduling decisions:")
+            message.append("⚠️ Key scheduling decisions:")
             for conflict in conflicts_found[:3]:  # Show up to 3 examples
                 message.append(conflict)
             message.append("")
@@ -105,16 +284,20 @@ class ScheduleNotifier:
         message.append("  - Type 'REJECT' to request changes")
         message.append("=" * 60)
 
-        return "\n".join(message)
+        return "\n".join(message), scheduled_orders
 
     @staticmethod
     def print_schedule(production_orders: List, created_order_ids: List):
         """Print formatted schedule to console"""
-        message = ScheduleNotifier.format_schedule_message(production_orders, created_order_ids)
+        message, scheduled_orders = ScheduleNotifier.format_schedule_message(production_orders, created_order_ids)
+        fig = ScheduleNotifier.build_gantt_chart(scheduled_orders)
+        if fig is None:
+            print("⚠ No schedulable orders found — Gantt chart skipped.")
+            return False
         print(message)
 
     @staticmethod
-    def send_to_telegram(bot_token: str, chat_id: str, message: str) -> bool:
+    def send_to_telegram(bot_token: str, chat_id: str, message: str, scheduled_orders, fig) -> bool:
         """
         Send message to Telegram using Bot API
         Automatically splits long messages into multiple parts
@@ -128,6 +311,7 @@ class ScheduleNotifier:
             True if all messages sent successfully, False otherwise
         """
         import requests
+        import tempfile
         import time
 
         if not bot_token or 'your_bot_token_here' in bot_token:
@@ -137,6 +321,40 @@ class ScheduleNotifier:
         if not chat_id or 'your_chat_id_here' in chat_id:
             print("Note: No valid Telegram chat ID configured. Displaying message only.")
             return False
+        
+        if fig is not None:
+            try: 
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                    tmp_path = tmp.name
+
+                pio.write_image(
+                    fig,
+                    tmp_path,
+                    format="png",
+                    width=1400,
+                    height=max(400, 80 * len(scheduled_orders)),
+                )
+
+                url = f"https://api.telegram.org/bot{bot_token}/sendPhoto"
+                with open(tmp_path, "rb") as photo:
+                    response = requests.post(
+                        url,
+                        data={
+                            "chat_id": chat_id,
+                            "caption": "📊 Production Schedule — Gantt Chart\nRed lines indicate customer deadlines.",
+                        },
+                        files={"photo": photo},
+                    )
+                response.raise_for_status()
+                print("📊 Gantt chart sent to Telegram successfully!")
+
+            except Exception as e:
+                print(f"Failed to send Gantt chart to Telegram: {e}")
+                if hasattr(e, "response") and e.response is not None:
+                    try:
+                        print(f"Telegram API error: {e.response.json()}")
+                    except Exception:
+                        pass
 
         try:
             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"

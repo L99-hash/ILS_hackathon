@@ -11,6 +11,9 @@ dependencies:
   - pytest-cov
   - black
   - flake8
+  - pandas
   - pip:
     - pydantic
     - httpx
+    - "plotly[express]"
+    - kaleido

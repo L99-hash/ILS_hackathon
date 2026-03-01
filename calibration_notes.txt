@@ -190,7 +190,59 @@ lerobot-replay \
     --dataset.episode=0
 ```
 
+**PCB-IND-100-Defect:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_PCB_IND_100_defect \
+    --dataset.root=data/pick_PCB_IND_100_defect \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick PCB IND 100 defect" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_PCB_IND_100_defect \
+    --dataset.root=data/pick_PCB_IND_100_defect \
+    --dataset.episode=0
+```
 
+**MED-300:**
+```bash
+lerobot-record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=Leader \
+    --display_data=false \
+    --dataset.repo_id=local/pick_MED_300_defect \
+    --dataset.root=data/pick_MED_300_defect \
+    --dataset.num_episodes=1 \
+    --dataset.single_task="Pick MED 300_defect" \
+    --dataset.push_to_hub=false \
+    --dataset.episode_time_s=30
+```
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_MED_300_defect \
+    --dataset.root=data/pick_MED_300_defect \
+    --dataset.episode=0
+```
 
 
 Here are all 5 record and replay commands with opencv camera index 1:

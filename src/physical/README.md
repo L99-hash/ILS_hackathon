@@ -1,16 +1,18 @@
 # Physical Robot Data — Replay Guide
 
-This folder contains recorded episode datasets for 5 pick tasks collected using an **SO101 follower** arm via LeRobot teleoperation.
+This folder contains recorded episode datasets for 5 pick tasks + 2 defect pick tasks collected using an **SO101 follower** arm via LeRobot teleoperation.
 
 ## Dataset Structure
 
 ```
 data/
-├── pick_AGR_400/        # AGR-400 component pick task
-├── pick_IOT_200/        # IOT-200 component pick task
-├── pick_MED_300/        # MED-300 component pick task
-├── pick_PCB_IND_100/    # PCB-IND-100 component pick task
-└── pick_PCB_PWR_500/    # PCB-PWR-500 component pick task
+├── pick_AGR_400/              # AGR-400 component pick task
+├── pick_IOT_200/              # IOT-200 component pick task
+├── pick_MED_300/              # MED-300 component pick task
+├── pick_PCB_IND_100/          # PCB-IND-100 component pick task
+├── pick_PCB_PWR_500/          # PCB-PWR-500 component pick task
+├── pick_PCB_IND_100_defect/   # PCB-IND-100 defect pick task
+└── pick_MED_300_defect/       # MED-300 defect pick task
 ```
 
 Each dataset folder contains:
@@ -81,6 +83,30 @@ lerobot-replay \
     --robot.id=Follower \
     --dataset.repo_id=local/pick_PCB_PWR_500 \
     --dataset.root=ILS_hackathon/src/physical/data/pick_PCB_PWR_500 \
+    --dataset.episode=0
+```
+
+### Defect Datasets
+
+**PCB-IND-100-Defect:**
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \  # <-- Change to YOUR port (run lerobot-find-port to check)
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_PCB_IND_100_defect \
+    --dataset.root=ILS_hackathon/src/physical/data/pick_PCB_IND_100_defect \
+    --dataset.episode=0
+```
+
+**MED-300-Defect:**
+```bash
+lerobot-replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM1 \  # <-- Change to YOUR port (run lerobot-find-port to check)
+    --robot.id=Follower \
+    --dataset.repo_id=local/pick_MED_300_defect \
+    --dataset.root=ILS_hackathon/src/physical/data/pick_MED_300_defect \
     --dataset.episode=0
 ```
 

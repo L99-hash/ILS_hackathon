@@ -122,3 +122,4 @@ Thumbs.db
 *.conf.backup
 config.backup.json
 efficient-net.pth
+efficient-net-5-classes.pth

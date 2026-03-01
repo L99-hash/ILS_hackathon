@@ -534,6 +534,190 @@ UNKNOWN
         else:
             return ("UNKNOWN", [])
 
+    def interpret_camera_selection(self, user_text: str) -> list:
+        """
+        Interpret user's camera selection
+
+        Args:
+            user_text: The message from the user (e.g., "0", "0,1", "all cameras", "camera 1 and 2")
+
+        Returns:
+            List of camera indices (e.g., [0], [0, 1, 2])
+            Returns empty list if cannot interpret
+        """
+        if not user_text or not user_text.strip():
+            return []
+
+        text = user_text.strip()
+        normalized = text.upper()
+
+        # Check cache
+        cache_key = f"camera_{normalized}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        # Exact matching first (fast path)
+        # Simple comma-separated format: "0", "0,1", "0,1,2"
+        if re.match(r'^\d+(,\d+)*$', text):
+            cameras = [int(x.strip()) for x in text.split(',')]
+            self.cache[cache_key] = cameras
+            return cameras
+
+        # Use Gemini AI for natural language interpretation if enabled
+        if self.enabled:
+            try:
+                result = self._gemini_interpret_camera(text)
+                self.cache[cache_key] = result
+                return result
+            except Exception as e:
+                print(f"⚠️ Gemini API error for camera interpretation: {e}")
+                return []
+
+        return []
+
+    def _gemini_interpret_camera(self, user_text: str) -> list:
+        """
+        Use Gemini AI to interpret camera selection
+
+        Args:
+            user_text: Raw user message
+
+        Returns:
+            List of camera indices
+        """
+        prompt = f"""You are interpreting a camera selection command.
+
+The user is selecting which camera(s) to use for monitoring. Available cameras are numbered 0, 1, 2, 3, etc.
+
+Examples of user input and correct interpretation:
+- "0" → camera 0 only
+- "camera 0" → camera 0 only
+- "1" → camera 1 only
+- "0,1" → cameras 0 and 1
+- "0 and 1" → cameras 0 and 1
+- "camera 0 and camera 1" → cameras 0 and 1
+- "all cameras" → cameras 0, 1, 2, 3
+- "first camera" → camera 0
+- "second camera" → camera 1
+- "cameras 1 and 2" → cameras 1 and 2
+- "use 0,1,2" → cameras 0, 1, 2
+
+User message: "{user_text}"
+
+Respond with ONLY the camera numbers separated by commas.
+Examples of valid responses:
+0
+0,1
+0,1,2
+1,2,3
+
+If you cannot determine the cameras, respond with: UNKNOWN
+"""
+
+        response = self.model.generate_content(prompt)
+        result = response.text.strip()
+
+        # Parse response
+        if result == "UNKNOWN":
+            return []
+
+        # Extract numbers from response
+        cameras = []
+        for part in result.split(','):
+            part = part.strip()
+            if part.isdigit():
+                cameras.append(int(part))
+
+        return cameras if cameras else []
+
+    def interpret_interval(self, user_text: str) -> int:
+        """
+        Interpret user's save interval input
+
+        Args:
+            user_text: The message from the user (e.g., "5", "10 seconds", "every 30 seconds")
+
+        Returns:
+            Number of seconds (e.g., 5, 10, 30)
+            Returns 0 if cannot interpret
+        """
+        if not user_text or not user_text.strip():
+            return 0
+
+        text = user_text.strip()
+        normalized = text.upper()
+
+        # Check cache
+        cache_key = f"interval_{normalized}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+
+        # Exact matching first (fast path)
+        # Simple number: "5", "10", "30"
+        if text.isdigit():
+            interval = int(text)
+            self.cache[cache_key] = interval
+            return interval
+
+        # Use Gemini AI for natural language interpretation if enabled
+        if self.enabled:
+            try:
+                result = self._gemini_interpret_interval(text)
+                self.cache[cache_key] = result
+                return result
+            except Exception as e:
+                print(f"⚠️ Gemini API error for interval interpretation: {e}")
+                return 0
+
+        return 0
+
+    def _gemini_interpret_interval(self, user_text: str) -> int:
+        """
+        Use Gemini AI to interpret the save interval
+
+        Args:
+            user_text: Raw user message
+
+        Returns:
+            Number of seconds
+        """
+        prompt = f"""You are interpreting a time interval for auto-saving camera frames.
+
+The user is setting how often frames should be saved (in seconds).
+
+Examples of user input and correct interpretation:
+- "5" → 5 seconds
+- "10" → 10 seconds
+- "30" → 30 seconds
+- "5 seconds" → 5 seconds
+- "every 10 seconds" → 10 seconds
+- "10s" → 10 seconds
+- "half a minute" → 30 seconds
+- "one minute" → 60 seconds
+- "every second" → 1 second
+- "every 5" → 5 seconds
+
+User message: "{user_text}"
+
+Respond with ONLY a number (the number of seconds).
+Examples of valid responses:
+5
+10
+30
+60
+
+If you cannot determine the interval, respond with: 0
+"""
+
+        response = self.model.generate_content(prompt)
+        result = response.text.strip()
+
+        # Parse response
+        if result.isdigit():
+            return int(result)
+        else:
+            return 0
+
     def clear_cache(self):
         """Clear the command interpretation cache"""
         self.cache.clear()

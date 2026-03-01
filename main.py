@@ -871,9 +871,10 @@ I didn't understand your response. Please reply with:
 
 Enable camera monitoring for the production line?
 
-Reply with:
-- *YES* to enable camera monitoring
-- *NO* to skip monitoring
+💬 *Natural Language Supported!*
+You can reply with:
+• *YES*, "sure", "enable", "go ahead", "ok"
+• *NO*, "skip", "nope", "disable"
 
 If YES, you'll be asked which camera(s) to use.
 
@@ -916,16 +917,32 @@ If YES, you'll be asked which camera(s) to use.
                                         if "message" in update:
                                             msg = update["message"]
                                             if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
-                                                text = msg.get("text", "").strip().upper()
+                                                text = msg.get("text", "").strip()
 
-                                                if text in ['YES', 'Y']:
+                                                # Use CommandMapper for natural language interpretation
+                                                interpreted = command_mapper.interpret_confirmation(text)
+
+                                                if interpreted == "YES":
                                                     enable_monitoring = 'yes'
-                                                    print("✓ Camera monitoring enabled")
+                                                    print(f"✓ Received: '{text}' → YES (Camera monitoring enabled)")
                                                     break
-                                                elif text in ['NO', 'N']:
+                                                elif interpreted == "NO":
                                                     enable_monitoring = 'no'
-                                                    print("✗ Camera monitoring disabled")
+                                                    print(f"✗ Received: '{text}' → NO (Camera monitoring disabled)")
                                                     break
+                                                else:
+                                                    # Not recognized - send retry prompt
+                                                    print(f"⚠ Could not interpret: '{text}'")
+                                                    retry_prompt = """❓ *Please confirm*
+
+I didn't understand your response. Please reply with:
+• *YES* to enable camera monitoring
+• *NO* to skip monitoring
+
+Natural language also works:
+• "sure", "enable", "go ahead" → YES
+• "skip", "nope", "disable" → NO"""
+                                                    notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, retry_prompt, None, None)
 
                                 if enable_monitoring:
                                     break
@@ -958,6 +975,13 @@ Reply with:
 - *1* for camera 1
 - *2* for camera 2
 - *0,1* for multiple cameras (comma-separated)
+
+💬 *Natural Language Supported!*
+You can also say:
+• "camera 0 and 1"
+• "all cameras"
+• "first camera"
+• "cameras 1 and 2"
 
 Example: *0,1* to use both camera 0 and 1"""
 
@@ -998,27 +1022,31 @@ Example: *0,1* to use both camera 0 and 1"""
                                                 msg = update["message"]
                                                 if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
                                                     camera_input = msg.get("text", "").strip()
-                                                    camera_input = camera_input.strip("'\"")
 
-                                                    # Parse camera indices
-                                                    if ',' in camera_input:
-                                                        # Multiple cameras
-                                                        for idx_str in camera_input.split(','):
-                                                            try:
-                                                                camera_indices.append(int(idx_str.strip()))
-                                                            except ValueError:
-                                                                pass
-                                                    else:
-                                                        # Single camera
-                                                        try:
-                                                            camera_indices = [int(camera_input)]
-                                                        except ValueError:
-                                                            pass
+                                                    # Use CommandMapper for natural language interpretation
+                                                    interpreted_cameras = command_mapper.interpret_camera_selection(camera_input)
 
-                                                    if camera_indices:
-                                                        print(f"✓ Selected camera(s): {camera_indices}")
+                                                    if interpreted_cameras:
+                                                        camera_indices = interpreted_cameras
+                                                        print(f"✓ Received: '{camera_input}' → cameras {camera_indices}")
                                                         camera_received = True
                                                         break
+                                                    else:
+                                                        # Not recognized - send retry prompt
+                                                        print(f"⚠ Could not interpret: '{camera_input}'")
+                                                        retry_prompt = """❓ *Please select camera(s)*
+
+I didn't understand your response. Please reply with:
+• *0* - camera 0
+• *1* - camera 1
+• *0,1* - multiple cameras (comma-separated)
+
+Or use natural language:
+• "camera 0 and 1"
+• "all cameras"
+• "first camera"
+"""
+                                                        notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, retry_prompt, None, None)
 
                                     if camera_received:
                                         break
@@ -1066,6 +1094,13 @@ How often should frames be automatically saved?
 
 Reply with number of seconds (e.g., *5*, *10*, *30*)
 
+💬 *Natural Language Supported!*
+You can also say:
+• "5 seconds"
+• "every 10 seconds"
+• "one minute"
+• "half a minute"
+
 Lower values = more images for dataset
 Default: *10* seconds"""
 
@@ -1107,11 +1142,27 @@ Default: *10* seconds"""
                                                 if str(msg.get("chat", {}).get("id")) == str(telegram_chat_id):
                                                     text = msg.get("text", "").strip()
 
-                                                    if text.isdigit():
-                                                        save_interval = int(text)
-                                                        print(f"✓ Save interval set to: {save_interval} seconds")
+                                                    # Use CommandMapper for natural language interpretation
+                                                    interpreted_interval = command_mapper.interpret_interval(text)
+
+                                                    if interpreted_interval > 0:
+                                                        save_interval = interpreted_interval
+                                                        print(f"✓ Received: '{text}' → {save_interval} seconds")
                                                         interval_received = True
                                                         break
+                                                    else:
+                                                        # Not recognized - send retry prompt
+                                                        print(f"⚠ Could not interpret: '{text}'")
+                                                        retry_prompt = """❓ *Please set save interval*
+
+I didn't understand your response. Please reply with:
+• A number: *5*, *10*, *30*
+• With units: "5 seconds", "one minute"
+• Natural: "every 10 seconds"
+
+Valid range: 1-60 seconds
+Default: 10 seconds"""
+                                                        notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, retry_prompt, None, None)
 
                                     if interval_received:
                                         break

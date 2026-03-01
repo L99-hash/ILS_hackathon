@@ -46,7 +46,7 @@ class CommandMapper:
         else:
             print("✗ Gemini API key not configured (using exact keyword matching)")
 
-    def interpret_command(self, user_text: str) -> Literal["CAPTURE", "GANTT", "UNKNOWN"]:
+    def interpret_command(self, user_text: str) -> Literal["CAPTURE", "GANTT", "CLASSIFY", "UNKNOWN"]:
         """
         Interpret user's natural language message and map to a command
 
@@ -54,7 +54,7 @@ class CommandMapper:
             user_text: The message from the user
 
         Returns:
-            One of: "CAPTURE", "GANTT", "UNKNOWN"
+            One of: "CAPTURE", "GANTT", "CLASSIFY", "UNKNOWN"
         """
         if not user_text or not user_text.strip():
             return "UNKNOWN"
@@ -83,7 +83,7 @@ class CommandMapper:
             self.cache[normalized] = result
             return result
 
-    def _exact_match(self, normalized_text: str) -> Literal["CAPTURE", "GANTT", "UNKNOWN"]:
+    def _exact_match(self, normalized_text: str) -> Literal["CAPTURE", "GANTT", "CLASSIFY", "UNKNOWN"]:
         """
         Fallback exact keyword matching (original behavior)
 
@@ -101,9 +101,13 @@ class CommandMapper:
         if normalized_text in ["GANTT", "SCHEDULE", "PLAN", "TIMELINE", "CHART"]:
             return "GANTT"
 
+        # CLASSIFY keywords
+        if normalized_text in ["CLASSIFY", "VERIFY", "CHECK", "IDENTIFY", "RECOGNIZE", "DETECT"]:
+            return "CLASSIFY"
+
         return "UNKNOWN"
 
-    def _gemini_interpret(self, user_text: str) -> Literal["CAPTURE", "GANTT", "UNKNOWN"]:
+    def _gemini_interpret(self, user_text: str) -> Literal["CAPTURE", "GANTT", "CLASSIFY", "UNKNOWN"]:
         """
         Use Gemini AI to interpret the command
 
@@ -115,7 +119,7 @@ class CommandMapper:
         """
         prompt = f"""You are a command interpreter for a production monitoring system.
 
-The user can send two types of commands:
+The user can send three types of commands:
 
 1. CAPTURE - Request to take a photo/image from the camera
    Examples: "take a photo", "capture frame", "snap picture", "grab image", "take a shot", "get a pic"
@@ -123,16 +127,19 @@ The user can send two types of commands:
 2. GANTT - Request to see the production schedule/timeline
    Examples: "show schedule", "production plan", "gantt chart", "timeline", "show me the plan", "what's the schedule"
 
+3. CLASSIFY - Request to classify/verify what's in the camera frame
+   Examples: "classify this", "what is this", "verify product", "identify this", "check what this is", "recognize this"
+
 User message: "{user_text}"
 
-Respond with ONLY one word: CAPTURE, GANTT, or UNKNOWN (if neither)
+Respond with ONLY one word: CAPTURE, GANTT, CLASSIFY, or UNKNOWN (if none match)
 """
 
         response = self.model.generate_content(prompt)
         result = response.text.strip().upper()
 
         # Validate response
-        if result in ["CAPTURE", "GANTT", "UNKNOWN"]:
+        if result in ["CAPTURE", "GANTT", "CLASSIFY", "UNKNOWN"]:
             return result
 
         # If Gemini returns unexpected response, try to extract
@@ -140,6 +147,8 @@ Respond with ONLY one word: CAPTURE, GANTT, or UNKNOWN (if neither)
             return "CAPTURE"
         elif "GANTT" in result:
             return "GANTT"
+        elif "CLASSIFY" in result:
+            return "CLASSIFY"
         else:
             return "UNKNOWN"
 

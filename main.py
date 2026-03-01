@@ -1180,6 +1180,16 @@ Default: 10 seconds"""
                             if interval_input.isdigit():
                                 save_interval = int(interval_input)
 
+                        # Initialize classifier if model weights exist
+                        classifier = None
+                        try:
+                            from src.physical.inference import ProductClassifier
+                            classifier = ProductClassifier(model_path="efficient-net.pth", num_classes=6)
+                            print("✓ Product classifier loaded successfully")
+                        except Exception as e:
+                            print(f"⚠️  Classifier not available: {e}")
+                            print("   Classification commands will be disabled")
+
                         print(f"\nStarting camera monitoring (Camera(s): {camera_indices})...")
                         print("A window will open showing live production line feed")
                         print(f"Auto-save interval: {save_interval} seconds")
@@ -1187,12 +1197,11 @@ Default: 10 seconds"""
                             print(f"Multiple cameras will be shown side-by-side")
                         print("Press 'q' in the camera window to stop monitoring a phase")
                         if telegram_bot_token and telegram_chat_id:
-                            print("Send 'CAPTURE' and 'GANTT' via Telegram!")
+                            print("Send 'CAPTURE', 'GANTT', and 'CLASSIFY' via Telegram!")
                         print()
 
-                        # Note: Camera monitoring will handle CAPTURE commands via its own listener
-                        # This GANTT listener will be disabled - camera module handles both GANTT and CAPTURE
-                        print("📱 Telegram commands (GANTT, CAPTURE) will be handled by camera monitor")
+                        # Note: Camera monitoring will handle all commands via its own listener
+                        print("📱 Telegram commands (GANTT, CAPTURE, CLASSIFY) will be handled by camera monitor")
 
                         # Send camera monitoring start notification to Telegram
                         if telegram_bot_token and telegram_chat_id and 'your_bot_token_here' not in telegram_bot_token:
@@ -1203,11 +1212,13 @@ Monitoring camera(s): {', '.join(map(str, camera_indices))}
 📸 *Available Commands:*
 • *CAPTURE* - Take photos from all cameras
 • *GANTT* - View the production schedule
+• *CLASSIFY* - Identify what's in the frame{' (AI-powered)' if classifier else ' (disabled)'}
 
 💬 *Natural Language Supported!*
 You can also say things like:
 • "take a photo", "snap picture", "grab image"
 • "show schedule", "production plan", "timeline"
+• "what is this", "verify product", "identify this"
 
 The camera window is now open on your computer."""
 
@@ -1220,7 +1231,8 @@ The camera window is now open on your computer."""
                             scheduled_orders=scheduled_orders,
                             notifier=notifier,
                             save_interval=save_interval,
-                            command_mapper=command_mapper
+                            command_mapper=command_mapper,
+                            classifier=classifier
                         )
 
                         try:

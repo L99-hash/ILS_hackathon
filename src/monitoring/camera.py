@@ -14,7 +14,7 @@ from datetime import datetime
 class SimpleLineMonitor:
     """Simple camera-based production line monitor with remote control"""
 
-    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10, command_mapper=None):
+    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10, command_mapper=None, classifier=None):
         """
         Initialize monitor with single or multiple cameras
 
@@ -26,6 +26,7 @@ class SimpleLineMonitor:
             notifier: ScheduleNotifier instance for sending GANTT
             save_interval: Seconds between automatic frame saves (default: 10)
             command_mapper: CommandMapper instance for natural language interpretation
+            classifier: ProductClassifier instance for image classification (optional)
         """
         # Support both single camera and multiple cameras
         if isinstance(camera_indices, int):
@@ -53,8 +54,12 @@ class SimpleLineMonitor:
         # Command interpretation
         self.command_mapper = command_mapper
 
+        # Image classification
+        self.classifier = classifier
+
         # Trigger system for external capture requests
         self.capture_triggers = []
+        self.classify_triggers = []
         self.trigger_lock = threading.Lock()
 
     def start_camera(self):
@@ -175,6 +180,9 @@ class SimpleLineMonitor:
                                         print("   ✗ GANTT not available (missing notifier or scheduled_orders)")
                                 except Exception as e:
                                     print(f"   ✗ Failed to send Gantt: {e}")
+                            elif command == "CLASSIFY":
+                                print(f"\n🔍 Telegram: Classification request received (interpreted: '{text}')")
+                                self.trigger_classify(reason="telegram")
                             elif command == "UNKNOWN":
                                 # Silently ignore unknown commands
                                 pass
@@ -325,6 +333,21 @@ class SimpleLineMonitor:
             self.capture_triggers.append(reason)
         return reason
 
+    def trigger_classify(self, reason="manual"):
+        """
+        Trigger an immediate classification of current frame
+        Can be called from Telegram, API, or any external system
+
+        Args:
+            reason: Why the classification was triggered (e.g., "telegram", "api", "verify")
+
+        Returns:
+            Reason string
+        """
+        with self.trigger_lock:
+            self.classify_triggers.append(reason)
+        return reason
+
     def check_and_process_triggers(self, frames_dict, phase_name, order_id):
         """
         Check if there are any pending capture triggers and process them
@@ -365,6 +388,67 @@ class SimpleLineMonitor:
                         print(f"   ✗ Failed to send to Telegram")
 
                 processed += 1
+
+        # Process classification triggers
+        classify_triggers = []
+
+        with self.trigger_lock:
+            if self.classify_triggers:
+                classify_triggers = self.classify_triggers.copy()
+                self.classify_triggers.clear()
+
+        for reason in classify_triggers:
+            if self.classifier:
+                # Classify each camera's frame
+                results = []
+                for cam_idx, frame in frames_dict.items():
+                    predicted_class, confidence, all_probs = self.classifier.classify_frame(frame)
+                    results.append({
+                        'camera': cam_idx,
+                        'class': predicted_class,
+                        'confidence': confidence,
+                        'all_probs': all_probs
+                    })
+
+                print(f"🔍 Classification triggered by {reason}:")
+                for result in results:
+                    print(f"   Camera {result['camera']}: {result['class']} ({result['confidence']:.1%})")
+
+                # Send results to Telegram if configured
+                if self.telegram_bot_token and self.telegram_chat_id:
+                    # Format message
+                    message_lines = [f"🔮 *Classification Results*", ""]
+                    message_lines.append(f"Phase: {phase_name}")
+                    message_lines.append(f"Time: {datetime.now().strftime('%H:%M:%S')}")
+                    message_lines.append("")
+
+                    for result in results:
+                        message_lines.append(f"*Camera {result['camera']}:*")
+                        message_lines.append(f"  Predicted: {result['class']}")
+                        message_lines.append(f"  Confidence: {result['confidence']:.1%}")
+                        message_lines.append("")
+
+                    message = "\n".join(message_lines)
+
+                    # Send message
+                    try:
+                        url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendMessage"
+                        response = requests.post(url, json={
+                            'chat_id': self.telegram_chat_id,
+                            'text': message,
+                            'parse_mode': 'Markdown'
+                        }, timeout=10)
+
+                        if response.ok:
+                            print(f"   ✓ Classification results sent to Telegram")
+                        else:
+                            print(f"   ✗ Failed to send results to Telegram")
+                    except Exception as e:
+                        print(f"   ✗ Error sending to Telegram: {e}")
+
+                processed += 1
+            else:
+                print(f"⚠️  Classification triggered but no classifier available")
 
         return processed
 

@@ -9,7 +9,8 @@
       "Bash(pip install:*)",
       "Bash(python test_camera.py:*)",
       "Bash(python:*)",
-      "Bash(conda env update:*)"
+      "Bash(conda env update:*)",
+      "Bash(conda env:*)"
     ],
     "deny": [],
     "ask": []

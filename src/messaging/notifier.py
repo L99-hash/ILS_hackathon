@@ -93,34 +93,41 @@ class ScheduleNotifier:
             height=max(300, 80 * len(rows)),
         )
 
-        # Add deadline markers as vertical lines positioned at each task's row
+        # Add deadline markers as scatter points on each task row
         from datetime import timezone
 
-        # Get task labels in order (for Y-axis positioning)
-        task_labels = df["Task"].tolist()
+        # Collect deadline marker data
+        deadline_x = []
+        deadline_y = []
+        deadline_text = []
 
         for idx, row in enumerate(rows):
             deadline_str = row["Deadline"]
             deadline_dt = datetime.strptime(deadline_str, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
-            deadline_ms = deadline_dt.timestamp() * 1000
+
             task_name = row["Task"]
 
-            # Add a vertical line shape at this specific task's row
-            # Y coordinates: idx (top of bar) to idx+0.9 (bottom of bar)
-            fig.add_shape(
-                type="line",
-                x0=deadline_ms,
-                x1=deadline_ms,
-                y0=idx - 0.4,  # Slightly above the bar
-                y1=idx + 0.4,  # Slightly below the bar
-                line=dict(
-                    color="red",
-                    width=2,
-                    dash="dot",
-                ),
-                yref="y",
-                xref="x",
-            )
+            # Add deadline point for this task
+            deadline_x.append(deadline_dt)
+            deadline_y.append(task_name)
+            deadline_text.append(f"Deadline: {deadline_str}")
+
+        # Add deadline markers as a scatter trace
+        fig.add_scatter(
+            x=deadline_x,
+            y=deadline_y,
+            mode='markers',
+            marker=dict(
+                symbol='line-ns',  # Vertical line marker
+                size=20,
+                color='red',
+                line=dict(width=3, color='red')
+            ),
+            name='Customer Deadlines',
+            text=deadline_text,
+            hovertemplate='%{text}<extra></extra>',
+            showlegend=True
+        )
 
         return fig
     

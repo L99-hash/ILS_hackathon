@@ -168,7 +168,7 @@ ILS_hackathon/
 
 ## Team
 
-Team ILS - NovaBoard Electronics Hackathon 2026
+Team ILS - ARKE
 
 ## License
 

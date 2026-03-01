@@ -70,6 +70,8 @@ class ScheduleNotifier:
         if not rows:
             return None
 
+        # Keep the original order from scheduled_orders to match the text schedule
+        # The scheduled_orders list is already in the correct execution order
         df = pd.DataFrame(rows)
 
         fig = px.timeline(
@@ -85,7 +87,11 @@ class ScheduleNotifier:
 
         # No text inside bars - Order ID is now in the task label on the left
 
-        fig.update_yaxes(autorange="reversed")
+        # Force y-axis to display in REVERSED order from the dataframe
+        # Plotly displays categories bottom-to-top by default, so we reverse the array
+        # to get top-to-bottom order matching the text schedule
+        # [::-1] reverses the list: first item in text → appears at TOP of Gantt
+        fig.update_yaxes(categoryorder='array', categoryarray=df["Task"].tolist()[::-1])
         fig.update_layout(
             xaxis_title="Timeline",
             yaxis_title="Production Order",
@@ -96,7 +102,7 @@ class ScheduleNotifier:
         # Add deadline markers as scatter points on each task row
         from datetime import timezone
 
-        # Collect deadline marker data
+        # Collect deadline marker data - use rows to match the displayed order
         deadline_x = []
         deadline_y = []
         deadline_text = []

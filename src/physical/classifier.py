@@ -9,11 +9,11 @@ import timm
 
 DATA_DIR = "data"
 SAVE_PATH = "efficient-net.pth"
-NUM_CLASSES = 8
-TARGET_CLASS = ["DEF1", "DEF2"]       # Only used for inference
+NUM_CLASSES = 7
+TARGET_CLASS = ["AGR-400", "DEF1", "DEF2", "IOT-200", "MED-300", "PCB-IND-100", "PCB-PWR-500"]       # Only used for inference
 
 EPOCHS = 8
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 LEARNING_RATE = 5e-4
 VAL_SPLIT = 0.2
 

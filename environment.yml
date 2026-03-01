@@ -23,3 +23,4 @@ dependencies:
     - kaleido
     - opencv-python>=4.8.0
     - google-generativeai==0.3.2
+    - lerobot[feetech]>=0.4.0

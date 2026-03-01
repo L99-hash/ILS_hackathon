@@ -10,7 +10,16 @@
       "Bash(python test_camera.py:*)",
       "Bash(python:*)",
       "Bash(conda env update:*)",
-      "Bash(conda env:*)"
+      "Bash(conda env:*)",
+      "Bash(find:*)",
+      "Bash(lerobot-replay:*)",
+      "Bash(conda run:*)",
+      "Bash(pip show:*)",
+      "Bash(pip index:*)",
+      "Bash(pip search:*)",
+      "Bash(lerobot-find-motors:*)",
+      "Read(//dev/**)",
+      "Bash(system_profiler:*)"
     ],
     "deny": [],
     "ask": []

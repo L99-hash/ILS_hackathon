@@ -11,3 +11,4 @@ torch>=2.0.0
 torchvision>=0.15.0
 timm>=0.9.0
 pillow>=10.0.0
+lerobot[feetech]>=0.4.0

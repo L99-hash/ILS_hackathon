@@ -14,7 +14,7 @@ from datetime import datetime
 class SimpleLineMonitor:
     """Simple camera-based production line monitor with remote control"""
 
-    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10, command_mapper=None, classifier=None):
+    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10, command_mapper=None, classifier=None, robot_executor=None):
         """
         Initialize monitor with single or multiple cameras
 
@@ -27,6 +27,7 @@ class SimpleLineMonitor:
             save_interval: Seconds between automatic frame saves (default: 10)
             command_mapper: CommandMapper instance for natural language interpretation
             classifier: ProductClassifier instance for image classification (optional)
+            robot_executor: RobotExecutor instance for executing robotic actions (optional)
         """
         # Support both single camera and multiple cameras
         if isinstance(camera_indices, int):
@@ -56,6 +57,9 @@ class SimpleLineMonitor:
 
         # Image classification
         self.classifier = classifier
+
+        # Robot action execution
+        self.robot_executor = robot_executor
 
         # Trigger system for external capture requests
         self.capture_triggers = []
@@ -414,6 +418,25 @@ class SimpleLineMonitor:
                 for result in results:
                     print(f"   Camera {result['camera']}: {result['class']} ({result['confidence']:.1%})")
 
+                # Execute robot action for the first (primary) camera's classification
+                if self.robot_executor and results:
+                    primary_result = results[0]  # Use first camera as primary
+                    predicted_class = primary_result['class']
+                    confidence = primary_result['confidence']
+
+                    print(f"\n🤖 Attempting robot action for: {predicted_class}")
+                    success, robot_message = self.robot_executor.execute_for_classification(
+                        predicted_class=predicted_class,
+                        confidence=confidence,
+                        confidence_threshold=0.7,
+                        dry_run=False  # Set to True for testing without actual robot execution
+                    )
+
+                    # Add robot execution status to results for Telegram
+                    for result in results:
+                        result['robot_executed'] = success
+                        result['robot_message'] = robot_message
+
                 # Send results to Telegram if configured
                 if self.telegram_bot_token and self.telegram_chat_id:
                     # Format message
@@ -426,6 +449,15 @@ class SimpleLineMonitor:
                         message_lines.append(f"*Camera {result['camera']}:*")
                         message_lines.append(f"  Predicted: {result['class']}")
                         message_lines.append(f"  Confidence: {result['confidence']:.1%}")
+                        message_lines.append("")
+
+                    # Add robot execution status if available
+                    if results and 'robot_executed' in results[0]:
+                        message_lines.append("*Robot Action:*")
+                        if results[0]['robot_executed']:
+                            message_lines.append(f"  ✓ {results[0]['robot_message']}")
+                        else:
+                            message_lines.append(f"  ⚠️  {results[0]['robot_message']}")
                         message_lines.append("")
 
                     message = "\n".join(message_lines)

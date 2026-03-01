@@ -1190,6 +1190,26 @@ Default: 10 seconds"""
                             print(f"⚠️  Classifier not available: {e}")
                             print("   Classification commands will be disabled")
 
+                        # Initialize robot executor for automated actions
+                        robot_executor = None
+                        robot_port = os.getenv("ROBOT_PORT", "/dev/cu.usbmodem5AB90687411")
+                        robot_calibration_dir = os.getenv("ROBOT_CALIBRATION_DIR", "./src/physical/calibration/robots/so_follower")
+                        try:
+                            from src.physical.robot_executor import RobotExecutor
+                            robot_executor = RobotExecutor(
+                                robot_port=robot_port,
+                                calibration_dir=robot_calibration_dir
+                            )
+                            print("✓ Robot executor initialized successfully")
+
+                            # List available actions
+                            actions = robot_executor.list_available_actions()
+                            ready_count = sum(1 for a in actions.values() if a['available'])
+                            print(f"   {ready_count}/{len(actions)} robot actions ready")
+                        except Exception as e:
+                            print(f"⚠️  Robot executor not available: {e}")
+                            print("   Robot actions will be disabled (classification will still work)")
+
                         print(f"\nStarting camera monitoring (Camera(s): {camera_indices})...")
                         print("A window will open showing live production line feed")
                         print(f"Auto-save interval: {save_interval} seconds")
@@ -1212,13 +1232,15 @@ Monitoring camera(s): {', '.join(map(str, camera_indices))}
 📸 *Available Commands:*
 • *CAPTURE* - Take photos from all cameras
 • *GANTT* - View the production schedule
-• *CLASSIFY* - Identify what's in the frame{' (AI-powered)' if classifier else ' (disabled)'}
+• *CLASSIFY* - Identify product and execute robot action{' (AI-powered)' if classifier else ' (disabled)'}
 
 💬 *Natural Language Supported!*
 You can also say things like:
 • "take a photo", "snap picture", "grab image"
 • "show schedule", "production plan", "timeline"
 • "what is this", "verify product", "identify this"
+
+🤖 *Robot Integration:*{' Enabled - will automatically execute pick actions' if robot_executor else ' Disabled - classification only'}
 
 The camera window is now open on your computer."""
 
@@ -1232,7 +1254,8 @@ The camera window is now open on your computer."""
                             notifier=notifier,
                             save_interval=save_interval,
                             command_mapper=command_mapper,
-                            classifier=classifier
+                            classifier=classifier,
+                            robot_executor=robot_executor
                         )
 
                         try:

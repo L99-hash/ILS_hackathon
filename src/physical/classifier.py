@@ -10,7 +10,7 @@ import timm
 DATA_DIR = "data"
 SAVE_PATH = "efficient-net.pth"
 NUM_CLASSES = 7
-TARGET_CLASS = ["AGR-400", "DEF1", "DEF2", "IOT-200", "MED-300", "PCB-IND-100", "PCB-PWR-500"]       # Only used for inference
+TARGET_CLASS = ["AGR-400", "PCB_IND_100_defect", "MED_300_defect", "IOT-200", "MED-300", "PCB-IND-100", "PCB-PWR-500"]       # Only used for inference
 
 EPOCHS = 8
 BATCH_SIZE = 32

@@ -20,7 +20,7 @@ class ProductClassifier:
     Loads trained weights and provides inference on camera frames
     """
 
-    def __init__(self, model_path: str = "efficient-net.pth", num_classes: int = 6):
+    def __init__(self, model_path: str = "efficient-net.pth", num_classes: int = 7):
         """
         Initialize classifier
 
@@ -54,11 +54,11 @@ class ProductClassifier:
                                std=[0.229, 0.224, 0.225]),
         ])
 
-        # Class names (should match training data folder structure)
-        # Customize this based on your actual classes
+        # Class names matching the training data (7 classes including defects)
         self.class_names = [
             "AGR-400",
-            "Defective",
+            "PCB_IND_100_defect",
+            "MED_300_defect",
             "IOT-200",
             "MED-300",
             "PCB-IND-100",

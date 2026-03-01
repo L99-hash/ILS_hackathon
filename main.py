@@ -1184,7 +1184,7 @@ Default: 10 seconds"""
                         classifier = None
                         try:
                             from src.physical.inference import ProductClassifier
-                            classifier = ProductClassifier(model_path="efficient-net.pth", num_classes=6)
+                            classifier = ProductClassifier(model_path="efficient-net.pth", num_classes=7)
                             print("✓ Product classifier loaded successfully")
                         except Exception as e:
                             print(f"⚠️  Classifier not available: {e}")

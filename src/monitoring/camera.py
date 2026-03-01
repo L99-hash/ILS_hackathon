@@ -403,12 +403,13 @@ class SimpleLineMonitor:
 
         for reason in classify_triggers:
             if self.classifier:
-                # Classify each camera's frame
+                # Classify only camera 0
                 results = []
-                for cam_idx, frame in frames_dict.items():
+                if 0 in frames_dict:
+                    frame = frames_dict[0]
                     predicted_class, confidence, all_probs = self.classifier.classify_frame(frame)
                     results.append({
-                        'camera': cam_idx,
+                        'camera': 0,
                         'class': predicted_class,
                         'confidence': confidence,
                         'all_probs': all_probs

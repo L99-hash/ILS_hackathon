@@ -49,8 +49,9 @@ class RobotExecutor:
             "IOT-200": "pick_IOT_200",
             "AGR-400": "pick_AGR_400",
             "PCB-PWR-500": "pick_PCB_PWR_500",
-            # Note: Defective products could potentially use defect datasets
-            "Defective": None  # No specific action for defective products
+            # Defect variants - use separate defect-specific datasets
+            "PCB_IND_100_defect": "pick_PCB_IND_100_defect",
+            "MED_300_defect": "pick_MED_300_defect",
         }
 
         print(f"🤖 Robot executor initialized")

@@ -9,7 +9,7 @@ import timm
 
 DATA_DIR = "data"
 SAVE_PATH = "efficient-net.pth"
-NUM_CLASSES = 6
+NUM_CLASSES = 8
 TARGET_CLASS = "Defective"        # Only used for inference
 
 EPOCHS = 5

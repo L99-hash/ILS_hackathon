@@ -10,10 +10,10 @@ import timm
 DATA_DIR = "data"
 SAVE_PATH = "efficient-net.pth"
 NUM_CLASSES = 8
-TARGET_CLASS = "Defective"        # Only used for inference
+TARGET_CLASS = ["DEF1", "DEF2"]       # Only used for inference
 
-EPOCHS = 5
-BATCH_SIZE = 32
+EPOCHS = 8
+BATCH_SIZE = 64
 LEARNING_RATE = 5e-4
 VAL_SPLIT = 0.2
 

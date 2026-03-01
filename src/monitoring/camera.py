@@ -14,7 +14,7 @@ from datetime import datetime
 class SimpleLineMonitor:
     """Simple camera-based production line monitor with remote control"""
 
-    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10, command_mapper=None, classifier=None, robot_executor=None):
+    def __init__(self, camera_indices=[0], telegram_bot_token=None, telegram_chat_id=None, scheduled_orders=None, notifier=None, save_interval=10, command_mapper=None, classifier=None, robot_executor=None, production_controller=None):
         """
         Initialize monitor with single or multiple cameras
 
@@ -28,6 +28,7 @@ class SimpleLineMonitor:
             command_mapper: CommandMapper instance for natural language interpretation
             classifier: ProductClassifier instance for image classification (optional)
             robot_executor: RobotExecutor instance for executing robotic actions (optional)
+            production_controller: ProductionController for managing phase lifecycle (optional)
         """
         # Support both single camera and multiple cameras
         if isinstance(camera_indices, int):
@@ -60,6 +61,9 @@ class SimpleLineMonitor:
 
         # Robot action execution
         self.robot_executor = robot_executor
+
+        # Production phase management
+        self.production_controller = production_controller
 
         # Trigger system for external capture requests
         self.capture_triggers = []
@@ -419,24 +423,42 @@ class SimpleLineMonitor:
                 for result in results:
                     print(f"   Camera {result['camera']}: {result['class']} ({result['confidence']:.1%})")
 
-                # Execute robot action for the first (primary) camera's classification
-                if self.robot_executor and results:
+                # Execute robot action and update production phase
+                if results:
                     primary_result = results[0]  # Use first camera as primary
                     predicted_class = primary_result['class']
                     confidence = primary_result['confidence']
 
-                    print(f"\n🤖 Attempting robot action for: {predicted_class}")
-                    success, robot_message = self.robot_executor.execute_for_classification(
-                        predicted_class=predicted_class,
-                        confidence=confidence,
-                        confidence_threshold=0.7,
-                        dry_run=False  # Set to True for testing without actual robot execution
-                    )
+                    # Execute robot action
+                    if self.robot_executor:
+                        print(f"\n🤖 Attempting robot action for: {predicted_class}")
+                        success, robot_message = self.robot_executor.execute_for_classification(
+                            predicted_class=predicted_class,
+                            confidence=confidence,
+                            confidence_threshold=0.7,
+                            dry_run=False
+                        )
 
-                    # Add robot execution status to results for Telegram
-                    for result in results:
-                        result['robot_executed'] = success
-                        result['robot_message'] = robot_message
+                        # Add robot execution status to results for Telegram
+                        for result in results:
+                            result['robot_executed'] = success
+                            result['robot_message'] = robot_message
+
+                    # Update production phase based on classification
+                    if self.production_controller and confidence >= 0.7:
+                        is_defect = "_defect" in predicted_class
+                        phase_success, phase_message = self.production_controller.handle_classification_result(
+                            classified_product=predicted_class,
+                            confidence=confidence,
+                            is_defect=is_defect
+                        )
+
+                        # Add phase status to results
+                        for result in results:
+                            result['phase_updated'] = phase_success
+                            result['phase_message'] = phase_message
+
+                        print(f"   Phase update: {phase_message}")
 
                 # Send results to Telegram if configured
                 if self.telegram_bot_token and self.telegram_chat_id:
@@ -461,6 +483,12 @@ class SimpleLineMonitor:
                             message_lines.append(f"  ⚠️  {results[0]['robot_message']}")
                         message_lines.append("")
 
+                    # Add phase update status if available
+                    if results and 'phase_updated' in results[0]:
+                        message_lines.append("*Production Phase:*")
+                        message_lines.append(f"  {results[0]['phase_message']}")
+                        message_lines.append("")
+
                     message = "\n".join(message_lines)
 
                     # Send message
@@ -475,7 +503,8 @@ class SimpleLineMonitor:
                         if response.ok:
                             print(f"   ✓ Classification results sent to Telegram")
                         else:
-                            print(f"   ✗ Failed to send results to Telegram")
+                            print(f"   ✗ Failed to send results to Telegram: {response.status_code}")
+                            print(f"      Response: {response.text[:200]}")
                     except Exception as e:
                         print(f"   ✗ Error sending to Telegram: {e}")
 
@@ -554,16 +583,20 @@ class SimpleLineMonitor:
         Args:
             phase_name: Name of the phase being monitored
             order_id: Production order ID
-            duration_seconds: How long to monitor (or until 'q' pressed)
+            duration_seconds: How long to monitor (0 = infinite, until 'q' pressed)
             save_interval: Save a frame every N seconds (None = use self.save_interval)
         """
         # Use instance save_interval if not specified
         if save_interval is None:
             save_interval = self.save_interval
+
         print(f"\n{'='*60}")
         print(f"MONITORING: {phase_name}")
         print(f"Order: {order_id}")
-        print(f"Duration: {duration_seconds}s")
+        if duration_seconds == 0:
+            print(f"Duration: Continuous (press 'q' to stop)")
+        else:
+            print(f"Duration: {duration_seconds}s")
         print(f"{'='*60}\n")
 
         if not self.cameras:
@@ -610,7 +643,8 @@ class SimpleLineMonitor:
                     print("\nMonitoring stopped by user")
                     break
 
-                if elapsed >= duration_seconds:
+                # Only check duration if not continuous (duration_seconds > 0)
+                if duration_seconds > 0 and elapsed >= duration_seconds:
                     print(f"\nPhase monitoring complete ({duration_seconds}s)")
                     break
 

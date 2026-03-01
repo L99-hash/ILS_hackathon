@@ -1246,6 +1246,19 @@ The camera window is now open on your computer."""
 
                             notifier.send_to_telegram(telegram_bot_token, telegram_chat_id, camera_start_msg, None, None)
 
+                        # Initialize production controller
+                        production_controller = None
+                        try:
+                            from src.physical.production_controller import ProductionController
+                            production_controller = ProductionController(
+                                api_client=client,
+                                scheduled_orders=scheduled_orders,
+                                notifier=notifier
+                            )
+                            print("✓ Production controller initialized")
+                        except Exception as e:
+                            print(f"⚠️  Production controller not available: {e}")
+
                         monitor = SimpleLineMonitor(
                             camera_indices=camera_indices,
                             telegram_bot_token=telegram_bot_token,
@@ -1255,48 +1268,32 @@ The camera window is now open on your computer."""
                             save_interval=save_interval,
                             command_mapper=command_mapper,
                             classifier=classifier,
-                            robot_executor=robot_executor
+                            robot_executor=robot_executor,
+                            production_controller=production_controller
                         )
 
                         try:
                             monitor.start_camera()
 
-                            # Monitor each production order
-                            for prod_order, scheduled_response in scheduled_orders:
-                                order_id = scheduled_response.get('id')
-                                phases = scheduled_response.get('phases', [])
+                            print(f"\n{'='*60}")
+                            print(f"CONTINUOUS PRODUCTION LINE MONITORING")
+                            print(f"Press 'q' in camera window to stop")
+                            if production_controller:
+                                order_info = production_controller.get_current_order_info()
+                                if order_info:
+                                    print(f"Current Order: {order_info['product_name']} ({order_info['order_index'] + 1}/{order_info['total_orders']})")
+                                    print(f"Quantity: {order_info['quantity']}")
+                            print(f"{'='*60}")
 
-                                if not phases:
-                                    print(f"\nNo phases found for {prod_order.product_name}, skipping...")
-                                    continue
-
-                                print(f"\n{'='*60}")
-                                print(f"Monitoring Order: {prod_order.product_name}")
-                                print(f"Order ID: {order_id}")
-                                print(f"Phases: {len(phases)}")
-                                print(f"{'='*60}")
-
-                                # Monitor each phase
-                                for i, phase in enumerate(phases, 1):
-                                    phase_name = phase.get('name', f'Phase {i}')
-
-                                    print(f"\n[{i}/{len(phases)}] Monitoring phase: {phase_name}")
-
-                                    # Monitor for 30 seconds per phase (adjust as needed)
-                                    monitor.monitor_phase(
-                                        phase_name=phase_name,
-                                        order_id=order_id,
-                                        duration_seconds=30
-                                        # save_interval uses instance default (configured by user)
-                                    )
-
-                                    # Brief pause between phases
-                                    if i < len(phases):
-                                        print("\nPreparing next phase...")
-                                        time.sleep(2)
+                            # Continuous monitoring (duration=0 means infinite)
+                            monitor.monitor_phase(
+                                phase_name="Production Line",
+                                order_id="continuous",
+                                duration_seconds=0  # Infinite - run until 'q' pressed
+                            )
 
                             print("\n" + "=" * 80)
-                            print("CAMERA MONITORING COMPLETE")
+                            print("CAMERA MONITORING STOPPED")
                             print("=" * 80)
                             print(f"Frames saved in: monitoring_frames/")
                             print()

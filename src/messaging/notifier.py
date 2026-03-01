@@ -72,6 +72,10 @@ class ScheduleNotifier:
 
         df = pd.DataFrame(rows)
 
+        # Convert ISO8601 datetime strings to datetime objects for Plotly
+        df['Start'] = pd.to_datetime(df['Start'], format='ISO8601')
+        df['Finish'] = pd.to_datetime(df['Finish'], format='ISO8601')
+
         fig = px.timeline(
             df,
             x_start="Start",

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Dashboard - ILS Hackathon</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <div>
+                <h1>🏭 Production Line Dashboard</h1>
+                <p class="subtitle">ILS Hackathon - Real-time Production Monitoring</p>
+            </div>
+            <div class="header-info">
+                <div id="last-update" class="update-time">Connecting...</div>
+                <div class="connection-status">
+                    <span id="connection-indicator" class="indicator connecting"></span>
+                    <span id="connection-text">Connecting</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Current Order Section -->
+        <section class="card current-order-card">
+            <h2>📋 Current Production Order</h2>
+            <div id="current-order" class="current-order-content">
+                <div class="order-name" id="order-name">Loading...</div>
+                <div class="order-details" id="order-details">--</div>
+                <div class="order-progress">
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">0 / 0 orders completed</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Statistics Cards -->
+        <section class="stats-grid">
+            <div class="stat-card stat-completed">
+                <div class="stat-icon">✅</div>
+                <div class="stat-value" id="completed-count">0</div>
+                <div class="stat-label">Orders Completed</div>
+            </div>
+            <div class="stat-card stat-defects">
+                <div class="stat-icon">⚠️</div>
+                <div class="stat-value" id="defect-count">0</div>
+                <div class="stat-label">Defects Detected</div>
+            </div>
+            <div class="stat-card stat-rework">
+                <div class="stat-icon">🔧</div>
+                <div class="stat-value" id="rework-count">0</div>
+                <div class="stat-label">Rework Orders</div>
+            </div>
+            <div class="stat-card stat-remaining">
+                <div class="stat-icon">📦</div>
+                <div class="stat-value" id="remaining-count">0</div>
+                <div class="stat-label">Remaining Orders</div>
+            </div>
+        </section>
+
+        <!-- Two Column Layout -->
+        <div class="two-column">
+            <!-- Left Column: Gantt Chart -->
+            <section class="card gantt-card">
+                <h2>📊 Production Schedule (Gantt Chart)</h2>
+                <div id="gantt-chart" class="chart-container">
+                    <div class="loading">Loading chart...</div>
+                </div>
+            </section>
+
+            <!-- Right Column: Defect Log -->
+            <section class="card defect-card">
+                <h2>⚠️ Defect Detection Log</h2>
+                <div class="table-container">
+                    <table id="defect-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Product</th>
+                                <th>Confidence</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="defect-tbody">
+                            <tr class="empty-row">
+                                <td colspan="4" class="empty-message">No defects detected yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- Completed Orders Section -->
+        <section class="card completed-card">
+            <h2>✅ Completed Orders</h2>
+            <div class="table-container">
+                <table id="completed-table">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Quantity</th>
+                            <th>Completed At</th>
+                            <th>Classified As</th>
+                            <th>Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="completed-tbody">
+                        <tr class="empty-row">
+                            <td colspan="5" class="empty-message">No orders completed yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p>🤖 Integrated with Robot Executor | 📱 Telegram Remote Control | 📊 Real-time Dashboard</p>
+            <p class="footer-note">Auto-refreshes every 2 seconds</p>
+        </footer>
+    </div>
+
+    <script src="/dashboard.js"></script>
+</body>
+</html>

@@ -1259,6 +1259,20 @@ The camera window is now open on your computer."""
                         except Exception as e:
                             print(f"⚠️  Production controller not available: {e}")
 
+                        # Start web dashboard
+                        try:
+                            from src.ui.dashboard_server import start_dashboard_server
+                            start_dashboard_server(
+                                production_controller=production_controller,
+                                notifier=notifier,
+                                scheduled_orders=scheduled_orders,
+                                policy_name=policy_name,
+                                port=8080
+                            )
+                        except Exception as e:
+                            print(f"⚠️  Dashboard server failed to start: {e}")
+                            print("   Production will continue without web dashboard")
+
                         monitor = SimpleLineMonitor(
                             camera_indices=camera_indices,
                             telegram_bot_token=telegram_bot_token,

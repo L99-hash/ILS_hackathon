@@ -126,8 +126,23 @@ To replay a different episode, change the `--dataset.episode` flag:
 
 - **Port setup:** The follower arm must be on `/dev/ttyACM1`. If your port differs, update `--robot.port` accordingly. Run `lerobot-find-port` to discover your port.
 - **WSL users:** You need to attach USB devices via `usbipd` in PowerShell before they appear in WSL (see `calibration_notes.txt` in the project root for details).
-- **Calibration:** Ensure the follower arm is calibrated before replay. Run:
+- **Calibration:** The `calibration/` folder in this directory contains pre-calibrated JSON files for our SO101 leader/follower arms. To use them, copy them to the lerobot cache:
+  ```bash
+  # Create the cache directories
+  mkdir -p ~/.cache/huggingface/lerobot/calibration/robots/so_follower
+  mkdir -p ~/.cache/huggingface/lerobot/calibration/teleoperators/so_leader
+
+  # Copy follower calibration
+  cp src/physical/calibration/robots/so_follower/Follower.json \
+     ~/.cache/huggingface/lerobot/calibration/robots/so_follower/
+
+  # Copy leader calibration
+  cp src/physical/calibration/teleoperators/so_leader/Leader.json \
+     ~/.cache/huggingface/lerobot/calibration/teleoperators/so_leader/
+  ```
+  > **Note:** These calibration files are specific to our physical arms. If you are using **different** hardware, run `lerobot-calibrate` yourself instead of copying these files:
   ```bash
   lerobot-calibrate --robot.type=so101_follower --robot.port=/dev/ttyACM1 --robot.id=Follower
+  lerobot-calibrate --teleop.type=so100_leader --teleop.port=/dev/ttyACM0 --teleop.id=Leader
   ```
 - The full calibration and recording reference is in [calibration_notes.txt](../../calibration_notes.txt) at the `ILS_hackathon/` root.

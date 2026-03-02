@@ -373,12 +373,12 @@ Simulated production line used for testing and development.
 ### Robot Pick-and-Place — Correct Part
 The SO101 arm executes the ACT policy trajectory for a correctly classified product.
 
-https://github.com/user-attachments/assets/10a77e47-aa3b-4471-b387-1e65c3eb7dfb
+https://github.com/user-attachments/assets/ce8720f1-564a-456e-bec0-85cafb02f4f3
 
 ### Robot Pick-and-Place — Defective Part
 When the classifier detects a defect, a separate pick-and-place trajectory moves the part to the reject bin.
 
-https://github.com/user-attachments/assets/fc2729ab-5423-498b-b8f6-cb7584a3f96f
+https://github.com/user-attachments/assets/2a9fd6e7-709d-44c4-9d1b-02ab5f780796
 
 ---
 
